@@ -12,11 +12,9 @@ const SHEET_NAMES = {
   CLOCK_IN: '打卡紀錄',
   BONUS_DUTY: '分紅與值班',
   HOLIDAYS: '國定假日',
-  PAYROLL: '薪資計算結果'
+  PAYROLL: '薪資計算結果',
+  EMPLOYEES: '員工名單'
 };
-
-// 員工名單（可依需求修改）
-const EMPLOYEES = ['王小明', '李小華', '張小美', '陳小強', '林小芬'];
 
 // ==================== 選單與初始化 ====================
 
@@ -49,7 +47,200 @@ function showSidebar() {
  * 取得員工名單供前端使用
  */
 function getEmployeeList() {
-  return EMPLOYEES;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.EMPLOYEES);
+
+  if (!sheet) {
+    // 如果分頁不存在，建立並返回預設員工
+    createSheetIfNotExists(ss, SHEET_NAMES.EMPLOYEES, ['員工姓名', '建立日期']);
+    return [];
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  return data.map(row => row[0]).filter(name => name !== '');
+}
+
+/**
+ * 新增員工
+ * @param {string} employeeName - 員工姓名
+ * @returns {object} - 處理結果
+ */
+function addEmployee(employeeName) {
+  try {
+    if (!employeeName || employeeName.trim() === '') {
+      return { success: false, message: '員工姓名不能為空' };
+    }
+
+    const name = employeeName.trim();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // 確保分頁存在
+    createSheetIfNotExists(ss, SHEET_NAMES.EMPLOYEES, ['員工姓名', '建立日期']);
+    const sheet = ss.getSheetByName(SHEET_NAMES.EMPLOYEES);
+
+    // 檢查是否已存在
+    const existingEmployees = getEmployeeList();
+    if (existingEmployees.includes(name)) {
+      return { success: false, message: '員工已存在：' + name };
+    }
+
+    // 新增員工
+    const lastRow = sheet.getLastRow();
+    const today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+    sheet.getRange(lastRow + 1, 1, 1, 2).setValues([[name, today]]);
+
+    return { success: true, message: '成功新增員工：' + name };
+  } catch (error) {
+    Logger.log('addEmployee Error: ' + error.toString());
+    return { success: false, message: '新增員工時發生錯誤：' + error.toString() };
+  }
+}
+
+/**
+ * 更新員工姓名
+ * @param {string} oldName - 舊姓名
+ * @param {string} newName - 新姓名
+ * @returns {object} - 處理結果
+ */
+function updateEmployee(oldName, newName) {
+  try {
+    if (!oldName || !newName || newName.trim() === '') {
+      return { success: false, message: '員工姓名不能為空' };
+    }
+
+    const newNameTrimmed = newName.trim();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAMES.EMPLOYEES);
+
+    if (!sheet) {
+      return { success: false, message: '員工名單分頁不存在' };
+    }
+
+    // 檢查新名稱是否已存在
+    const existingEmployees = getEmployeeList();
+    if (existingEmployees.includes(newNameTrimmed) && newNameTrimmed !== oldName) {
+      return { success: false, message: '員工姓名已存在：' + newNameTrimmed };
+    }
+
+    // 找到並更新
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return { success: false, message: '找不到員工：' + oldName };
+    }
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    let found = false;
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === oldName) {
+        sheet.getRange(i + 2, 1).setValue(newNameTrimmed);
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      return { success: false, message: '找不到員工：' + oldName };
+    }
+
+    // 同步更新其他分頁中的員工姓名
+    updateEmployeeNameInAllSheets(oldName, newNameTrimmed);
+
+    return { success: true, message: '成功更新員工姓名：' + oldName + ' → ' + newNameTrimmed };
+  } catch (error) {
+    Logger.log('updateEmployee Error: ' + error.toString());
+    return { success: false, message: '更新員工時發生錯誤：' + error.toString() };
+  }
+}
+
+/**
+ * 刪除員工
+ * @param {string} employeeName - 員工姓名
+ * @returns {object} - 處理結果
+ */
+function deleteEmployee(employeeName) {
+  try {
+    if (!employeeName) {
+      return { success: false, message: '員工姓名不能為空' };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAMES.EMPLOYEES);
+
+    if (!sheet) {
+      return { success: false, message: '員工名單分頁不存在' };
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return { success: false, message: '找不到員工：' + employeeName };
+    }
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    let rowToDelete = -1;
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === employeeName) {
+        rowToDelete = i + 2; // +2 因為標題列和 0-index
+        break;
+      }
+    }
+
+    if (rowToDelete === -1) {
+      return { success: false, message: '找不到員工：' + employeeName };
+    }
+
+    sheet.deleteRow(rowToDelete);
+
+    return { success: true, message: '成功刪除員工：' + employeeName };
+  } catch (error) {
+    Logger.log('deleteEmployee Error: ' + error.toString());
+    return { success: false, message: '刪除員工時發生錯誤：' + error.toString() };
+  }
+}
+
+/**
+ * 同步更新所有分頁中的員工姓名
+ */
+function updateEmployeeNameInAllSheets(oldName, newName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 更新打卡紀錄
+  const clockInSheet = ss.getSheetByName(SHEET_NAMES.CLOCK_IN);
+  if (clockInSheet) {
+    updateNameInColumn(clockInSheet, 1, oldName, newName);
+  }
+
+  // 更新分紅與值班
+  const bonusSheet = ss.getSheetByName(SHEET_NAMES.BONUS_DUTY);
+  if (bonusSheet) {
+    updateNameInColumn(bonusSheet, 2, oldName, newName);
+  }
+
+  // 更新薪資計算結果
+  const payrollSheet = ss.getSheetByName(SHEET_NAMES.PAYROLL);
+  if (payrollSheet) {
+    updateNameInColumn(payrollSheet, 3, oldName, newName);
+  }
+}
+
+/**
+ * 更新指定欄位中的姓名
+ */
+function updateNameInColumn(sheet, column, oldName, newName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const data = sheet.getRange(2, column, lastRow - 1, 1).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    if (data[i][0] === oldName) {
+      sheet.getRange(i + 2, column).setValue(newName);
+    }
+  }
 }
 
 // ==================== 分頁初始化 ====================
@@ -75,6 +266,10 @@ function initializeSheets() {
   // 4. 薪資計算結果
   createSheetIfNotExists(ss, SHEET_NAMES.PAYROLL,
     ['年份', '月份', '員工姓名', '公司應上工時', '實際上班工時', '時數差異(抵扣額度)', '總分紅', '總值日費']);
+
+  // 5. 員工名單
+  createSheetIfNotExists(ss, SHEET_NAMES.EMPLOYEES,
+    ['員工姓名', '建立日期']);
 
   SpreadsheetApp.getUi().alert('✅ 系統初始化完成！\n已建立/確認所有必要分頁。');
 }
@@ -458,10 +653,17 @@ function calculateMonthlyPayroll(year, month) {
     // 3. 取得分紅與值班記錄
     const bonusDutyRecords = getBonusDutyRecords(year, month);
 
-    // 4. 計算每位員工的薪資
+    // 4. 取得員工名單
+    const employees = getEmployeeList();
+
+    if (employees.length === 0) {
+      return { success: false, message: '尚未設定任何員工，請先在「員工名單」分頁新增員工' };
+    }
+
+    // 5. 計算每位員工的薪資
     const payrollData = [];
 
-    for (const employee of EMPLOYEES) {
+    for (const employee of employees) {
       // 計算實際工時
       const actualHours = clockInRecords
         .filter(r => r.name === employee)
@@ -505,7 +707,7 @@ function calculateMonthlyPayroll(year, month) {
       success: true,
       message: `${year}年${month}月薪資計算完成！\n\n` +
                `📊 標準工時: ${standardHours} 小時\n` +
-               `👥 已計算 ${EMPLOYEES.length} 位員工的薪資資料`
+               `👥 已計算 ${employees.length} 位員工的薪資資料`
     };
 
   } catch (error) {

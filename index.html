@@ -241,6 +241,206 @@
     .preview-image.show {
       display: block;
     }
+
+    /* Employee Management Styles */
+    .employee-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .employee-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f3f4;
+    }
+
+    .employee-item:last-child {
+      border-bottom: none;
+    }
+
+    .employee-name {
+      font-size: 14px;
+      color: #202124;
+    }
+
+    .employee-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-icon {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s;
+    }
+
+    .btn-edit {
+      background-color: #e8f0fe;
+      color: #1a73e8;
+    }
+
+    .btn-edit:hover {
+      background-color: #d2e3fc;
+    }
+
+    .btn-delete {
+      background-color: #fce8e6;
+      color: #c5221f;
+    }
+
+    .btn-delete:hover {
+      background-color: #f5c6c2;
+    }
+
+    .add-employee-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .add-employee-form input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .add-employee-form input:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+    }
+
+    .btn-add {
+      padding: 10px 16px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-add:hover {
+      background: #1557b0;
+    }
+
+    .btn-add:disabled {
+      background: #dadce0;
+      cursor: not-allowed;
+    }
+
+    .empty-list {
+      padding: 20px;
+      text-align: center;
+      color: #80868b;
+      font-size: 13px;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      width: 280px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    }
+
+    .modal-title {
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      color: #202124;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    .modal input:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn-cancel {
+      padding: 8px 16px;
+      background: #f1f3f4;
+      color: #5f6368;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-confirm {
+      padding: 8px 16px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .section-collapsible {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-collapsible .toggle-icon {
+      transition: transform 0.2s;
+    }
+
+    .section-collapsible.collapsed .toggle-icon {
+      transform: rotate(-90deg);
+    }
+
+    .section-content {
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+
+    .section-content.collapsed {
+      max-height: 0 !important;
+    }
   </style>
 </head>
 <body>
@@ -309,6 +509,60 @@
     <div class="status-message" id="statusLedger"></div>
   </div>
 
+  <!-- Section C: 員工管理 -->
+  <div class="section">
+    <h2 class="section-title section-collapsible" onclick="toggleSection('employeeSection')">
+      <span class="section-icon">👥</span>
+      區塊 C - 員工管理
+      <span class="toggle-icon" style="margin-left: auto;">▼</span>
+    </h2>
+
+    <div class="section-content" id="employeeSection">
+      <div class="form-group">
+        <label class="form-label">目前員工名單</label>
+        <div class="employee-list" id="employeeListContainer">
+          <div class="empty-list">載入中...</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">新增員工</label>
+        <div class="add-employee-form">
+          <input type="text" id="newEmployeeName" placeholder="輸入員工姓名">
+          <button class="btn-add" onclick="addNewEmployee()">新增</button>
+        </div>
+      </div>
+
+      <div class="status-message" id="statusEmployee"></div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <h3 class="modal-title">編輯員工姓名</h3>
+      <input type="text" id="editEmployeeName" placeholder="輸入新姓名">
+      <input type="hidden" id="editEmployeeOldName">
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeEditModal()">取消</button>
+        <button class="btn-confirm" onclick="confirmEditEmployee()">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <h3 class="modal-title">確認刪除</h3>
+      <p style="margin: 0 0 16px 0; color: #5f6368;">確定要刪除員工「<span id="deleteEmployeeName"></span>」嗎？</p>
+      <input type="hidden" id="deleteEmployeeTarget">
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeDeleteModal()">取消</button>
+        <button class="btn-confirm" style="background: #c5221f;" onclick="confirmDeleteEmployee()">刪除</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <div class="footer">
     Powered by Gemini Vision API<br>
@@ -326,11 +580,16 @@
       setupDragAndDrop();
     });
 
-    // 載入員工名單
+    // 載入員工名單（下拉選單）
     function loadEmployeeList() {
       google.script.run
         .withSuccessHandler(function(employees) {
           const select = document.getElementById('employeeSelect');
+          // 清除現有選項（保留第一個預設選項）
+          while (select.options.length > 1) {
+            select.remove(1);
+          }
+          // 新增員工選項
           employees.forEach(function(name) {
             const option = document.createElement('option');
             option.value = name;
@@ -538,6 +797,178 @@
       document.getElementById('ledgerPreview').classList.remove('show');
       updateLedgerButton();
     }
+
+    // ==================== 員工管理功能 ====================
+
+    // 載入並顯示員工列表
+    function loadEmployeeListUI() {
+      google.script.run
+        .withSuccessHandler(function(employees) {
+          renderEmployeeList(employees);
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('employeeListContainer').innerHTML =
+            '<div class="empty-list">載入失敗：' + error.message + '</div>';
+        })
+        .getEmployeeList();
+    }
+
+    // 渲染員工列表
+    function renderEmployeeList(employees) {
+      const container = document.getElementById('employeeListContainer');
+
+      if (!employees || employees.length === 0) {
+        container.innerHTML = '<div class="empty-list">尚無員工資料，請新增員工</div>';
+        return;
+      }
+
+      let html = '';
+      employees.forEach(function(name) {
+        html += '<div class="employee-item">' +
+                  '<span class="employee-name">' + escapeHtml(name) + '</span>' +
+                  '<div class="employee-actions">' +
+                    '<button class="btn-icon btn-edit" onclick="openEditModal(\'' + escapeHtml(name) + '\')" title="編輯">✏️</button>' +
+                    '<button class="btn-icon btn-delete" onclick="openDeleteModal(\'' + escapeHtml(name) + '\')" title="刪除">🗑️</button>' +
+                  '</div>' +
+                '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    // HTML 轉義
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 新增員工
+    function addNewEmployee() {
+      const input = document.getElementById('newEmployeeName');
+      const name = input.value.trim();
+
+      if (!name) {
+        showStatus('statusEmployee', 'error', '請輸入員工姓名');
+        return;
+      }
+
+      showStatus('statusEmployee', 'loading', '新增中...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showStatus('statusEmployee', 'success', '✅ ' + result.message);
+            input.value = '';
+            loadEmployeeListUI();
+            loadEmployeeList(); // 更新下拉選單
+          } else {
+            showStatus('statusEmployee', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          showStatus('statusEmployee', 'error', '❌ 新增失敗：' + error.message);
+        })
+        .addEmployee(name);
+    }
+
+    // 開啟編輯彈窗
+    function openEditModal(name) {
+      document.getElementById('editEmployeeOldName').value = name;
+      document.getElementById('editEmployeeName').value = name;
+      document.getElementById('editModal').classList.add('show');
+      document.getElementById('editEmployeeName').focus();
+    }
+
+    // 關閉編輯彈窗
+    function closeEditModal() {
+      document.getElementById('editModal').classList.remove('show');
+    }
+
+    // 確認編輯員工
+    function confirmEditEmployee() {
+      const oldName = document.getElementById('editEmployeeOldName').value;
+      const newName = document.getElementById('editEmployeeName').value.trim();
+
+      if (!newName) {
+        alert('請輸入員工姓名');
+        return;
+      }
+
+      closeEditModal();
+      showStatus('statusEmployee', 'loading', '更新中...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showStatus('statusEmployee', 'success', '✅ ' + result.message);
+            loadEmployeeListUI();
+            loadEmployeeList(); // 更新下拉選單
+          } else {
+            showStatus('statusEmployee', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          showStatus('statusEmployee', 'error', '❌ 更新失敗：' + error.message);
+        })
+        .updateEmployee(oldName, newName);
+    }
+
+    // 開啟刪除確認彈窗
+    function openDeleteModal(name) {
+      document.getElementById('deleteEmployeeTarget').value = name;
+      document.getElementById('deleteEmployeeName').textContent = name;
+      document.getElementById('deleteModal').classList.add('show');
+    }
+
+    // 關閉刪除彈窗
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('show');
+    }
+
+    // 確認刪除員工
+    function confirmDeleteEmployee() {
+      const name = document.getElementById('deleteEmployeeTarget').value;
+
+      closeDeleteModal();
+      showStatus('statusEmployee', 'loading', '刪除中...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showStatus('statusEmployee', 'success', '✅ ' + result.message);
+            loadEmployeeListUI();
+            loadEmployeeList(); // 更新下拉選單
+          } else {
+            showStatus('statusEmployee', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          showStatus('statusEmployee', 'error', '❌ 刪除失敗：' + error.message);
+        })
+        .deleteEmployee(name);
+    }
+
+    // 切換區塊展開/收合
+    function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      const title = section.previousElementSibling;
+
+      section.classList.toggle('collapsed');
+      title.classList.toggle('collapsed');
+    }
+
+    // Enter 鍵新增員工
+    document.getElementById('newEmployeeName').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        addNewEmployee();
+      }
+    });
+
+    // 初始化時載入員工列表 UI
+    document.addEventListener('DOMContentLoaded', function() {
+      loadEmployeeListUI();
+    });
   </script>
 </body>
 </html>

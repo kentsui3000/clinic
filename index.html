@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: #f8f9fa;
+    }
+
+    .header {
+      text-align: center;
+      padding: 16px 0;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      color: white;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .header p {
+      margin: 8px 0 0 0;
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a73e8;
+    }
+
+    .section-icon {
+      font-size: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #5f6368;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+      background-color: white;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .form-select:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+    }
+
+    .file-upload-area {
+      border: 2px dashed #dadce0;
+      border-radius: 8px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background-color: #fafafa;
+    }
+
+    .file-upload-area:hover {
+      border-color: #1a73e8;
+      background-color: #e8f0fe;
+    }
+
+    .file-upload-area.has-file {
+      border-color: #34a853;
+      background-color: #e6f4ea;
+    }
+
+    .file-upload-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .file-upload-text {
+      font-size: 13px;
+      color: #5f6368;
+    }
+
+    .file-name {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #1a73e8;
+      font-weight: 500;
+      word-break: break-all;
+    }
+
+    .hidden-input {
+      display: none;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      background: #dadce0;
+      color: #80868b;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #34a853 0%, #1e8e3e 100%);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      box-shadow: 0 4px 12px rgba(52, 168, 83, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary:disabled {
+      background: #dadce0;
+      color: #80868b;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status-message {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .status-message.show {
+      display: block;
+    }
+
+    .status-message.success {
+      background-color: #e6f4ea;
+      color: #1e8e3e;
+      border: 1px solid #34a853;
+    }
+
+    .status-message.error {
+      background-color: #fce8e6;
+      color: #c5221f;
+      border: 1px solid #ea4335;
+    }
+
+    .status-message.loading {
+      background-color: #e8f0fe;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 11px;
+      color: #80868b;
+    }
+
+    .preview-image {
+      max-width: 100%;
+      max-height: 150px;
+      margin-top: 12px;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .preview-image.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>智慧薪資助理</h1>
+    <p>AI 圖像辨識 · 自動化薪資計算</p>
+  </div>
+
+  <!-- Section A: 上傳打卡紙 -->
+  <div class="section">
+    <h2 class="section-title">
+      <span class="section-icon">🕐</span>
+      區塊 A - 上傳打卡紙
+    </h2>
+
+    <div class="form-group">
+      <label class="form-label">選擇員工姓名</label>
+      <select id="employeeSelect" class="form-select">
+        <option value="">-- 請選擇員工 --</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">上傳打卡紙照片</label>
+      <div class="file-upload-area" id="timeCardArea" onclick="document.getElementById('timeCardInput').click()">
+        <div class="file-upload-icon">📸</div>
+        <div class="file-upload-text">點擊選擇或拖曳圖片</div>
+        <div class="file-name" id="timeCardFileName"></div>
+        <img class="preview-image" id="timeCardPreview" alt="Preview">
+      </div>
+      <input type="file" id="timeCardInput" class="hidden-input" accept="image/*" onchange="handleTimeCardSelect(this)">
+    </div>
+
+    <button class="btn btn-primary" id="btnProcessTimeCard" onclick="processTimeCard()" disabled>
+      <span id="btnTimeCardText">開始辨識打卡紀錄</span>
+      <span class="spinner" id="spinnerTimeCard" style="display: none;"></span>
+    </button>
+
+    <div class="status-message" id="statusTimeCard"></div>
+  </div>
+
+  <!-- Section B: 上傳手寫帳本 -->
+  <div class="section">
+    <h2 class="section-title">
+      <span class="section-icon">📒</span>
+      區塊 B - 上傳手寫帳本
+    </h2>
+
+    <div class="form-group">
+      <label class="form-label">上傳每日營運帳本照片</label>
+      <div class="file-upload-area" id="ledgerArea" onclick="document.getElementById('ledgerInput').click()">
+        <div class="file-upload-icon">📸</div>
+        <div class="file-upload-text">點擊選擇或拖曳圖片</div>
+        <div class="file-name" id="ledgerFileName"></div>
+        <img class="preview-image" id="ledgerPreview" alt="Preview">
+      </div>
+      <input type="file" id="ledgerInput" class="hidden-input" accept="image/*" onchange="handleLedgerSelect(this)">
+    </div>
+
+    <button class="btn btn-secondary" id="btnProcessLedger" onclick="processLedger()" disabled>
+      <span id="btnLedgerText">開始辨識分紅/值班</span>
+      <span class="spinner" id="spinnerLedger" style="display: none;"></span>
+    </button>
+
+    <div class="status-message" id="statusLedger"></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    Powered by Gemini Vision API<br>
+    診所薪資自動化系統 v1.0
+  </div>
+
+  <script>
+    // 全域變數
+    let timeCardBase64 = null;
+    let ledgerBase64 = null;
+
+    // 頁面載入時初始化
+    document.addEventListener('DOMContentLoaded', function() {
+      loadEmployeeList();
+      setupDragAndDrop();
+    });
+
+    // 載入員工名單
+    function loadEmployeeList() {
+      google.script.run
+        .withSuccessHandler(function(employees) {
+          const select = document.getElementById('employeeSelect');
+          employees.forEach(function(name) {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+          });
+        })
+        .withFailureHandler(function(error) {
+          console.error('載入員工名單失敗:', error);
+        })
+        .getEmployeeList();
+    }
+
+    // 設定拖放功能
+    function setupDragAndDrop() {
+      ['timeCardArea', 'ledgerArea'].forEach(function(areaId) {
+        const area = document.getElementById(areaId);
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+          area.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(function(eventName) {
+          area.addEventListener(eventName, function() {
+            area.style.borderColor = '#1a73e8';
+            area.style.backgroundColor = '#e8f0fe';
+          }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(function(eventName) {
+          area.addEventListener(eventName, function() {
+            area.style.borderColor = '#dadce0';
+            area.style.backgroundColor = '#fafafa';
+          }, false);
+        });
+
+        area.addEventListener('drop', function(e) {
+          const file = e.dataTransfer.files[0];
+          if (file && file.type.startsWith('image/')) {
+            if (areaId === 'timeCardArea') {
+              handleFile(file, 'timeCard');
+            } else {
+              handleFile(file, 'ledger');
+            }
+          }
+        }, false);
+      });
+    }
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // 處理打卡紙檔案選擇
+    function handleTimeCardSelect(input) {
+      if (input.files && input.files[0]) {
+        handleFile(input.files[0], 'timeCard');
+      }
+    }
+
+    // 處理帳本檔案選擇
+    function handleLedgerSelect(input) {
+      if (input.files && input.files[0]) {
+        handleFile(input.files[0], 'ledger');
+      }
+    }
+
+    // 處理檔案讀取與預覽
+    function handleFile(file, type) {
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const base64 = e.target.result;
+
+        if (type === 'timeCard') {
+          timeCardBase64 = base64;
+          document.getElementById('timeCardFileName').textContent = file.name;
+          document.getElementById('timeCardArea').classList.add('has-file');
+          document.getElementById('timeCardPreview').src = base64;
+          document.getElementById('timeCardPreview').classList.add('show');
+          updateTimeCardButton();
+        } else {
+          ledgerBase64 = base64;
+          document.getElementById('ledgerFileName').textContent = file.name;
+          document.getElementById('ledgerArea').classList.add('has-file');
+          document.getElementById('ledgerPreview').src = base64;
+          document.getElementById('ledgerPreview').classList.add('show');
+          updateLedgerButton();
+        }
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    // 更新打卡紙按鈕狀態
+    function updateTimeCardButton() {
+      const employee = document.getElementById('employeeSelect').value;
+      const btn = document.getElementById('btnProcessTimeCard');
+      btn.disabled = !timeCardBase64 || !employee;
+    }
+
+    // 更新帳本按鈕狀態
+    function updateLedgerButton() {
+      const btn = document.getElementById('btnProcessLedger');
+      btn.disabled = !ledgerBase64;
+    }
+
+    // 員工選擇變更時
+    document.getElementById('employeeSelect').addEventListener('change', updateTimeCardButton);
+
+    // 處理打卡紙辨識
+    function processTimeCard() {
+      const employee = document.getElementById('employeeSelect').value;
+
+      if (!timeCardBase64 || !employee) {
+        showStatus('statusTimeCard', 'error', '請選擇員工並上傳圖片');
+        return;
+      }
+
+      setProcessing('timeCard', true);
+      showStatus('statusTimeCard', 'loading', '⏳ AI 正在辨識打卡紙，請稍候...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setProcessing('timeCard', false);
+          if (result.success) {
+            showStatus('statusTimeCard', 'success', '✅ ' + result.message);
+            resetTimeCardForm();
+          } else {
+            showStatus('statusTimeCard', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          setProcessing('timeCard', false);
+          showStatus('statusTimeCard', 'error', '❌ 處理失敗: ' + error.message);
+        })
+        .processTimeCardImage(timeCardBase64, employee);
+    }
+
+    // 處理帳本辨識
+    function processLedger() {
+      if (!ledgerBase64) {
+        showStatus('statusLedger', 'error', '請上傳帳本圖片');
+        return;
+      }
+
+      setProcessing('ledger', true);
+      showStatus('statusLedger', 'loading', '⏳ AI 正在辨識帳本內容，請稍候...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setProcessing('ledger', false);
+          if (result.success) {
+            showStatus('statusLedger', 'success', '✅ ' + result.message);
+            resetLedgerForm();
+          } else {
+            showStatus('statusLedger', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          setProcessing('ledger', false);
+          showStatus('statusLedger', 'error', '❌ 處理失敗: ' + error.message);
+        })
+        .processLedgerImage(ledgerBase64);
+    }
+
+    // 設定處理中狀態
+    function setProcessing(type, isProcessing) {
+      if (type === 'timeCard') {
+        document.getElementById('btnProcessTimeCard').disabled = isProcessing;
+        document.getElementById('btnTimeCardText').textContent = isProcessing ? '辨識中...' : '開始辨識打卡紀錄';
+        document.getElementById('spinnerTimeCard').style.display = isProcessing ? 'inline-block' : 'none';
+      } else {
+        document.getElementById('btnProcessLedger').disabled = isProcessing;
+        document.getElementById('btnLedgerText').textContent = isProcessing ? '辨識中...' : '開始辨識分紅/值班';
+        document.getElementById('spinnerLedger').style.display = isProcessing ? 'inline-block' : 'none';
+      }
+    }
+
+    // 顯示狀態訊息
+    function showStatus(elementId, type, message) {
+      const el = document.getElementById(elementId);
+      el.className = 'status-message show ' + type;
+      el.textContent = message;
+    }
+
+    // 重設打卡紙表單
+    function resetTimeCardForm() {
+      timeCardBase64 = null;
+      document.getElementById('timeCardInput').value = '';
+      document.getElementById('timeCardFileName').textContent = '';
+      document.getElementById('timeCardArea').classList.remove('has-file');
+      document.getElementById('timeCardPreview').classList.remove('show');
+      document.getElementById('employeeSelect').value = '';
+      updateTimeCardButton();
+    }
+
+    // 重設帳本表單
+    function resetLedgerForm() {
+      ledgerBase64 = null;
+      document.getElementById('ledgerInput').value = '';
+      document.getElementById('ledgerFileName').textContent = '';
+      document.getElementById('ledgerArea').classList.remove('has-file');
+      document.getElementById('ledgerPreview').classList.remove('show');
+      updateLedgerButton();
+    }
+  </script>
+</body>
+</html>

@@ -5,7 +5,8 @@
 
 // ==================== 設定區 ====================
 const GEMINI_API_KEY = 'YOUR_KEY_HERE'; // 請替換為您的 Gemini API Key
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
+// 模型可換成 gemini-2.5-pro（更準但較慢／較貴）；2.5-flash 對中文手寫已經很夠
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // 分頁名稱常數
 const SHEET_NAMES = {

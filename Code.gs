@@ -855,3 +855,386 @@ function getBonusDutyRecords(year, month) {
 
   return records;
 }
+
+// ====================================================================
+// 行動版 Web App  (給 webapp/ 靜態頁面呼叫的 REST 風格端點)
+// 部署：發行 → 新增部署作業 → 類型「網頁應用程式」
+//   - 執行身分：我（這樣會以你的權限寫入試算表）
+//   - 誰可以存取：「任何人」
+// 部署後得到一組 https://script.google.com/macros/s/.../exec URL
+// 把這個 URL + WEBAPP_SECRET 填到 webapp 的「設定」頁。
+// ====================================================================
+
+const WEBAPP_SECRET = 'change-me-before-deploy';   // ⚠️ 請改成自己的密碼
+
+// 班別 → 試算表上的列尾標籤
+const SHIFT_TO_BONUS_ROW = { morning: 'A', afternoon: 'B', night: 'C' };
+const SHIFT_TO_DUTY_ROW  = { morning: 'AM Duty', afternoon: 'PM Duty', night: 'PM Duty' };
+const EMPLOYEE_ROW_SUFFIXES = ['AM Duty', 'PM Duty', 'A', 'B', 'C'];
+const DUTY_FEE = 100;
+
+function doGet(e) {
+  return jsonOut({
+    status: 'ok',
+    service: 'clinic-bonus-ocr',
+    version: '1.0',
+    actions: ['ping', 'ocr', 'save', 'summary', 'employees']
+  });
+}
+
+function doPost(e) {
+  let body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonOut({ success: false, message: '請求 body 不是有效 JSON' });
+  }
+
+  if (body.secret !== WEBAPP_SECRET) {
+    return jsonOut({ success: false, message: '密碼錯誤 (secret mismatch)' });
+  }
+
+  let result;
+  try {
+    switch (body.action) {
+      case 'ping':
+        result = { success: true, message: 'pong', time: new Date().toISOString() };
+        break;
+      case 'ocr':
+        result = ocrBonusDutyShift(body.image);
+        break;
+      case 'save':
+        result = saveBonusDutyShiftRecord(body.record, body.spreadsheetId);
+        break;
+      case 'summary':
+        result = getBonusMonthSummary(body.year, body.month, body.spreadsheetId);
+        break;
+      case 'employees':
+        result = { success: true, employees: getKnownEmployees(body.spreadsheetId) };
+        break;
+      default:
+        result = { success: false, message: '未知 action: ' + body.action };
+    }
+  } catch (err) {
+    Logger.log('doPost Error: ' + err.toString());
+    result = { success: false, message: '伺服器錯誤: ' + err.toString() };
+  }
+  return jsonOut(result);
+}
+
+function jsonOut(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ==================== Bonus + Shift 專用 OCR ====================
+
+function ocrBonusDutyShift(base64Image) {
+  if (!base64Image) {
+    return { success: false, message: '缺少圖片資料' };
+  }
+
+  const prompt = [
+    '你是一位有 20 年經驗的中文手寫文字辨識專家，特別擅長辨識診所員工手寫帳本。',
+    '請仔細分析這張圖片，提取以下資訊：',
+    '',
+    '【步驟 1：找出標頭資訊（重點看圖片最上方）】',
+    '- 日期：通常在頂部中央，格式如「2026.04.06 W一(早)」、「2026.04.01 W三(午)」、「2026.04.06 W一(晚)」',
+    '  → 抽取年/月/日，輸出 YYYY-MM-DD 格式',
+    '  → 抽取班別括號內：「早」=morning、「午」=afternoon、「晚」=night',
+    '- 值日生：通常在「左上角」寫著「值日生：XXX」，可能是手寫名字或紅色印章',
+    '  → 也可能在「右上角」（最多 3 位）',
+    '  → 印章字尾若有「RN」/「醫」/「藥」等職稱請去除（例：「江芯儀RN」→「江芯儀」）',
+    '',
+    '【步驟 2：辨識表格】',
+    '表格欄位通常為：序號 | 姓名 | 主分紅金額 | 次分紅金額 | 備註',
+    '每一行請提取：',
+    '- name: 員工姓名（中文 2~4 字）',
+    '- bonus_main: 主欄分紅（常見值 0/80/150/200/300）',
+    '- bonus_extra: 次欄分紅（常見值 5/15/20/45/60/100/130/205 等小整數，無則 0）',
+    '- note: 備註文字（如「備藥」「榮民」「慢箋」「殘」），無則空字串',
+    '',
+    '【輸出格式】',
+    '只輸出純 JSON，不要任何 ``` 標記或說明文字：',
+    '{',
+    '  "date": "2026-04-06",',
+    '  "shift": "morning",',
+    '  "duty_persons": ["郭雅如"],',
+    '  "entries": [',
+    '    {"name": "莊榆植", "bonus_main": 0,   "bonus_extra": 0,   "note": "備藥"},',
+    '    {"name": "莊統憲", "bonus_main": 200, "bonus_extra": 0,   "note": ""},',
+    '    {"name": "林郁言", "bonus_main": 200, "bonus_extra": 60,  "note": ""}',
+    '  ]',
+    '}',
+    '',
+    '【注意】',
+    '- 所有金額必須是整數，無法辨識則填 0',
+    '- 多位值日生請全部列出',
+    '- 跳過空白列、模糊不清難以辨識的列',
+    '- 不要編造任何資訊',
+    '- 若完全無法辨識，回傳 {"date": null, "shift": null, "duty_persons": [], "entries": []}'
+  ].join('\n');
+
+  const apiResult = callGeminiVisionAPI(base64Image, prompt);
+  if (!apiResult.success) return apiResult;
+
+  let text = (apiResult.data || '').trim();
+  // 去除 markdown code fence
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) {
+      try { parsed = JSON.parse(m[0]); } catch (e2) {}
+    }
+  }
+
+  if (!parsed) {
+    return { success: false, message: '解析 OCR 結果失敗', raw: apiResult.data };
+  }
+
+  // 正規化
+  parsed.duty_persons = (parsed.duty_persons || []).filter(Boolean);
+  parsed.entries = (parsed.entries || []).map(function (en) {
+    return {
+      name: (en.name || '').trim(),
+      bonus_main: parseInt(en.bonus_main, 10) || 0,
+      bonus_extra: parseInt(en.bonus_extra, 10) || 0,
+      note: (en.note || '').trim()
+    };
+  }).filter(function (en) { return en.name; });
+
+  return { success: true, data: parsed };
+}
+
+// ==================== Save：寫入矩陣式月份分頁 ====================
+
+function saveBonusDutyShiftRecord(record, spreadsheetId) {
+  if (!record || !record.date || !record.shift) {
+    return { success: false, message: '資料不完整：缺少 date 或 shift' };
+  }
+
+  const bonusSuffix = SHIFT_TO_BONUS_ROW[record.shift];
+  const dutySuffix  = SHIFT_TO_DUTY_ROW[record.shift];
+  if (!bonusSuffix) {
+    return { success: false, message: '無效班別：' + record.shift };
+  }
+
+  const m = String(record.date).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) {
+    return { success: false, message: '日期格式錯誤，應為 YYYY-MM-DD：' + record.date };
+  }
+  const year  = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const day   = parseInt(m[3], 10);
+  if (day < 1 || day > 31) {
+    return { success: false, message: '日期超出範圍' };
+  }
+
+  const ss = openSpreadsheet(spreadsheetId);
+  const sheetName = year + '-' + month;
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = createMonthSheet(ss, year, month);
+
+  const dayCol = day + 1; // A=1 為標籤欄，第 1 日 = B 欄 = 2
+  const writes = [];
+
+  // 寫分紅
+  (record.entries || []).forEach(function (entry) {
+    if (!entry.name) return;
+    const amount = parseInt(entry.bonus, 10);
+    if (!amount || amount === 0) return; // 0 不寫
+    const rowIndex = ensureEmployeeRow(sheet, entry.name, bonusSuffix);
+    sheet.getRange(rowIndex, dayCol).setValue(amount);
+    writes.push({ row: entry.name + ' ' + bonusSuffix, day: day, value: amount });
+  });
+
+  // 寫值日費
+  (record.duty_persons || []).forEach(function (name) {
+    if (!name) return;
+    const rowIndex = ensureEmployeeRow(sheet, name, dutySuffix);
+    sheet.getRange(rowIndex, dayCol).setValue(DUTY_FEE);
+    writes.push({ row: name + ' ' + dutySuffix, day: day, value: DUTY_FEE });
+  });
+
+  refreshTotalsColumn(sheet);
+
+  return {
+    success: true,
+    sheetName: sheetName,
+    day: day,
+    shift: record.shift,
+    writeCount: writes.length,
+    writes: writes,
+    message: '已寫入 ' + sheetName + ' (' + day + '日 ' + record.shift + ')，共 ' + writes.length + ' 筆'
+  };
+}
+
+function openSpreadsheet(spreadsheetId) {
+  if (spreadsheetId) {
+    return SpreadsheetApp.openById(spreadsheetId);
+  }
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  throw new Error('未提供 spreadsheetId 且 Apps Script 未綁定試算表');
+}
+
+function createMonthSheet(ss, year, month) {
+  const sheetName = year + '-' + month;
+  const sheet = ss.insertSheet(sheetName);
+
+  // A1 月份標籤
+  sheet.getRange(1, 1).setValue(year + '-' + month);
+
+  // Row 2: 1-31
+  const days = [];
+  for (let d = 1; d <= 31; d++) days.push(d);
+  sheet.getRange(2, 2, 1, 31).setValues([days]);
+  sheet.getRange(2, 33).setValue('total');
+
+  // Row 3: 星期
+  const wkLetters = ['日', '一', '二', '三', '四', '五', '六'];
+  const wks = [];
+  for (let d = 1; d <= 31; d++) {
+    const dt = new Date(year, month - 1, d);
+    wks.push(dt.getMonth() === month - 1 ? wkLetters[dt.getDay()] : '');
+  }
+  sheet.getRange(3, 2, 1, 31).setValues([wks]);
+
+  sheet.getRange(1, 1, 3, 33)
+    .setFontWeight('bold')
+    .setBackground('#e8f0fe')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(3);
+  sheet.setFrozenColumns(1);
+  sheet.setColumnWidth(1, 130);
+  for (let c = 2; c <= 32; c++) sheet.setColumnWidth(c, 38);
+  sheet.setColumnWidth(33, 70);
+
+  return sheet;
+}
+
+/**
+ * 確保某員工的 5 列（AM Duty / PM Duty / A / B / C）都存在
+ * 並回傳指定 suffix 的列號
+ */
+function ensureEmployeeRow(sheet, employeeName, suffix) {
+  const lastRow = sheet.getLastRow();
+  const startRow = 4;
+  const targetLabel = employeeName + ' ' + suffix;
+
+  let labels = [];
+  if (lastRow >= startRow) {
+    labels = sheet.getRange(startRow, 1, lastRow - startRow + 1, 1).getValues();
+    for (let i = 0; i < labels.length; i++) {
+      if (labels[i][0] === targetLabel) return startRow + i;
+    }
+  }
+
+  // 找出該員工現有的列（任何 suffix）
+  const existing = {};
+  for (let i = 0; i < labels.length; i++) {
+    const lbl = labels[i][0];
+    if (typeof lbl !== 'string') continue;
+    EMPLOYEE_ROW_SUFFIXES.forEach(function (sfx) {
+      if (lbl === employeeName + ' ' + sfx) {
+        existing[sfx] = startRow + i;
+      }
+    });
+  }
+
+  // 起始插入位置：若已有任何列 → 緊接著最後一列；否則接到表尾
+  let insertAt = (Object.keys(existing).length > 0)
+    ? Math.max.apply(null, Object.values(existing)) + 1
+    : Math.max(lastRow + 1, startRow);
+
+  EMPLOYEE_ROW_SUFFIXES.forEach(function (sfx) {
+    if (!existing[sfx]) {
+      sheet.getRange(insertAt, 1).setValue(employeeName + ' ' + sfx);
+      existing[sfx] = insertAt;
+      insertAt++;
+    }
+  });
+
+  return existing[suffix];
+}
+
+function refreshTotalsColumn(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 4) return;
+  const formulas = [];
+  for (let r = 4; r <= lastRow; r++) {
+    formulas.push(['=SUM(B' + r + ':AF' + r + ')']);
+  }
+  sheet.getRange(4, 33, formulas.length, 1).setFormulas(formulas);
+}
+
+// ==================== Summary：本月每位員工的總額 ====================
+
+function getBonusMonthSummary(year, month, spreadsheetId) {
+  const ss = openSpreadsheet(spreadsheetId);
+  const sheetName = year + '-' + month;
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return { success: true, sheetName: sheetName, employees: [], grandTotal: 0 };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 4) {
+    return { success: true, sheetName: sheetName, employees: [], grandTotal: 0 };
+  }
+
+  const labels = sheet.getRange(4, 1, lastRow - 3, 1).getValues();
+  const totals = sheet.getRange(4, 33, lastRow - 3, 1).getValues();
+
+  const map = {};
+  for (let i = 0; i < labels.length; i++) {
+    const lbl = labels[i][0];
+    if (typeof lbl !== 'string' || !lbl) continue;
+    const m = lbl.match(/^(.+?)\s+(AM Duty|PM Duty|A|B|C)$/);
+    if (!m) continue;
+    const name = m[1];
+    const suffix = m[2];
+    const total = parseFloat(totals[i][0]) || 0;
+    if (!map[name]) {
+      map[name] = { name: name, am_duty: 0, pm_duty: 0, a: 0, b: 0, c: 0, bonus: 0, duty: 0, total: 0 };
+    }
+    if (suffix === 'AM Duty')      { map[name].am_duty = total; map[name].duty += total; }
+    else if (suffix === 'PM Duty') { map[name].pm_duty = total; map[name].duty += total; }
+    else if (suffix === 'A')       { map[name].a = total; map[name].bonus += total; }
+    else if (suffix === 'B')       { map[name].b = total; map[name].bonus += total; }
+    else if (suffix === 'C')       { map[name].c = total; map[name].bonus += total; }
+    map[name].total += total;
+  }
+
+  const employees = Object.keys(map).map(function (k) { return map[k]; })
+    .sort(function (a, b) { return b.total - a.total; });
+  const grandTotal = employees.reduce(function (s, e) { return s + e.total; }, 0);
+
+  return { success: true, sheetName: sheetName, employees: employees, grandTotal: grandTotal };
+}
+
+function getKnownEmployees(spreadsheetId) {
+  const ss = openSpreadsheet(spreadsheetId);
+  const sheets = ss.getSheets();
+  const set = {};
+
+  for (let i = 0; i < sheets.length; i++) {
+    const sh = sheets[i];
+    if (!/^\d{4}-\d{1,2}$/.test(sh.getName())) continue;
+    const lastRow = sh.getLastRow();
+    if (lastRow < 4) continue;
+    const labels = sh.getRange(4, 1, lastRow - 3, 1).getValues();
+    for (let j = 0; j < labels.length; j++) {
+      const lbl = labels[j][0];
+      if (typeof lbl !== 'string') continue;
+      const m = lbl.match(/^(.+?)\s+(AM Duty|PM Duty|A|B|C)$/);
+      if (m) set[m[1]] = true;
+    }
+  }
+  return Object.keys(set).sort();
+}

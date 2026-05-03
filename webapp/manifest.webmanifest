@@ -1,0 +1,13 @@
+{
+  "name": "診所分紅 OCR 助手",
+  "short_name": "分紅 OCR",
+  "description": "用手機拍照辨識診所手寫帳本，自動填入 Google 試算表",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5f7",
+  "theme_color": "#0b8043",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

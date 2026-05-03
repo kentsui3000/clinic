@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b8043">
+  <title>診所分紅 OCR 助手</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>📋 分紅 OCR</h1>
+    <div class="topbar-actions">
+      <button class="icon-btn" data-go="viewSummary" aria-label="統計">📊</button>
+      <button class="icon-btn" data-go="viewSettings" aria-label="設定">⚙️</button>
+    </div>
+  </header>
+
+  <main id="app">
+
+    <!-- 1. 拍照 / 選圖 -->
+    <section id="viewCapture" class="view active">
+      <div class="card">
+        <h2>拍照或上傳手寫帳本</h2>
+        <p class="hint">建議拍清楚整張紙，重點放在<strong>上方</strong>（日期、班別、值日生）。</p>
+
+        <label class="upload-box">
+          <input type="file" id="fileInput" accept="image/*" capture="environment" hidden>
+          <div class="upload-icon">📷</div>
+          <div class="upload-text">點擊拍照 / 選擇照片</div>
+        </label>
+
+        <div id="previewWrap" class="preview-wrap" hidden>
+          <img id="preview" alt="預覽">
+          <div class="row">
+            <button id="btnReplace" class="btn btn-secondary">重拍</button>
+            <button id="btnRecognize" class="btn btn-primary">🔍 開始辨識</button>
+          </div>
+          <p class="hint" id="imageInfo"></p>
+        </div>
+      </div>
+
+      <div class="card" id="recentCard" hidden>
+        <h3>最近紀錄</h3>
+        <ul id="recentList" class="recent-list"></ul>
+      </div>
+    </section>
+
+    <!-- 2. 辨識中 -->
+    <section id="viewLoading" class="view">
+      <div class="card center">
+        <div class="spinner"></div>
+        <div id="loadingText">辨識中⋯</div>
+        <p class="hint">手寫辨識通常 5–15 秒，請稍候</p>
+      </div>
+    </section>
+
+    <!-- 3. 確認資料 -->
+    <section id="viewReview" class="view">
+      <div class="card">
+        <h2>請確認資料</h2>
+        <div class="grid-2">
+          <div class="form-row">
+            <label>日期</label>
+            <input type="date" id="reviewDate">
+          </div>
+          <div class="form-row">
+            <label>班別</label>
+            <select id="reviewShift">
+              <option value="morning">早 (A)</option>
+              <option value="afternoon">午 (B)</option>
+              <option value="night">晚 (C)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>值日生（多位用逗號分隔，每位記 100 元）</label>
+          <input type="text" id="reviewDuty" placeholder="例：江芯儀, 楊嘉惠">
+        </div>
+
+        <h3>分紅明細</h3>
+        <div class="bonus-source">
+          <span class="hint">套用金額：</span>
+          <label><input type="radio" name="bonusSrc" value="extra" checked> 次欄 (對應你既有試算表)</label>
+          <label><input type="radio" name="bonusSrc" value="main"> 主欄</label>
+          <label><input type="radio" name="bonusSrc" value="sum"> 主+次</label>
+        </div>
+        <div id="entriesList" class="entries-list"></div>
+        <button id="btnAddEntry" class="btn btn-secondary btn-block">+ 新增一行</button>
+      </div>
+
+      <div class="card sticky-actions">
+        <div class="row">
+          <button id="btnBack" class="btn btn-secondary">返回</button>
+          <button id="btnSave" class="btn btn-primary">💾 儲存到試算表</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 成功 -->
+    <section id="viewSuccess" class="view">
+      <div class="card center">
+        <div class="big-emoji">✅</div>
+        <h2>儲存成功</h2>
+        <div id="successDetail" class="hint"></div>
+        <div class="row">
+          <button id="btnViewSummary" class="btn btn-secondary">📊 看統計</button>
+          <button id="btnNew" class="btn btn-primary">📷 下一張</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 設定 -->
+    <section id="viewSettings" class="view">
+      <div class="card">
+        <h2>⚙️ 設定</h2>
+        <div class="form-row">
+          <label>Apps Script Web App URL</label>
+          <input type="url" id="settingsUrl" inputmode="url" autocomplete="off"
+                 placeholder="https://script.google.com/macros/s/.../exec">
+          <p class="hint">在 Apps Script 編輯器：發行 → 新增部署 → 網頁應用程式</p>
+        </div>
+        <div class="form-row">
+          <label>共用密碼 (Secret)</label>
+          <input type="password" id="settingsSecret" autocomplete="off">
+          <p class="hint">必須等於 Code.gs 內的 <code>WEBAPP_SECRET</code></p>
+        </div>
+        <div class="form-row">
+          <label>試算表 ID（選填）</label>
+          <input type="text" id="settingsSheetId" autocomplete="off"
+                 placeholder="留空則使用 Apps Script 綁定的試算表">
+          <p class="hint">在試算表 URL 中 <code>/d/</code> 後面那一段</p>
+        </div>
+        <div class="row">
+          <button id="btnTestConn" class="btn btn-secondary">🔌 測試連線</button>
+          <button id="btnSaveSettings" class="btn btn-primary">儲存設定</button>
+        </div>
+        <hr>
+        <h3>進階</h3>
+        <div class="row">
+          <button id="btnClearRecent" class="btn btn-secondary">清空最近紀錄</button>
+          <button id="btnExport" class="btn btn-secondary">匯出設定</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 月份統計 -->
+    <section id="viewSummary" class="view">
+      <div class="card">
+        <h2>📊 月份統計</h2>
+        <div class="row">
+          <input type="month" id="summaryMonth">
+          <button id="btnRefreshSummary" class="btn btn-primary">查詢</button>
+        </div>
+        <div id="summaryGrand" class="grand-total"></div>
+        <div id="summaryTable" class="summary-table"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

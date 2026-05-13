@@ -2,9 +2,11 @@
  * ============================================================
  * 徐嘉賢診所員工分紅自動化系統 - Apps Script
  * ============================================================
- * 版本：v1.3
+ * 版本：v1.4
  * 更新日期：2026-05-13
  * 變更紀錄：
+ *   v1.4 — Form 2 欄位「患者代號」整個改名為「病歷號」;
+ *          migrateMetaFormFieldNames() 同時處理此遷移。
  *   v1.3 — Form 2 欄位重新命名:「執行員工」→「執行人員」;
  *          「患者代號」說明文字改為「請填病歷號碼,避免重複收案」。
  *          新增 migrateMetaFormFieldNames() 給既有部署一鍵遷移。
@@ -232,8 +234,8 @@ function buildMetaForm_() {
       .setRequired(true);
 
   form.addTextItem()
-      .setTitle('患者代號')
-      .setHelpText('請填病歷號碼,避免重複收案')
+      .setTitle('病歷號')
+      .setHelpText('避免重複收案')
       .setRequired(false);
 
   form.addTextItem()
@@ -483,9 +485,13 @@ function migrateMetaFormFieldNames() {
       changed++;
     }
 
-    if (title === '患者代號') {
-      item.setHelpText('請填病歷號碼,避免重複收案');
-      Logger.log('✓ 「患者代號」說明文字已更新為「請填病歷號碼,避免重複收案」');
+    if (title === '患者代號' || title === '病歷號') {
+      if (title === '患者代號') {
+        item.setTitle('病歷號');
+        Logger.log('✓ 欄位標題:「患者代號」→「病歷號」');
+      }
+      item.setHelpText('避免重複收案');
+      Logger.log('✓ 「病歷號」說明文字已更新');
       changed++;
     }
   });

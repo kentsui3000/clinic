@@ -162,7 +162,7 @@ def build_form_daily_sheet(wb):
 # ============================================================
 def build_form_meta_sheet(wb):
     ws = wb.create_sheet("Form回應_代謝")
-    headers = ["時間戳記", "日期", "時段", "活動類型", "執行人員", "患者代號", "備註"]
+    headers = ["時間戳記", "日期", "時段", "活動類型", "執行人員", "病歷號", "備註"]
     ws.append(headers)
     style_header_row(ws, 1, len(headers))
 

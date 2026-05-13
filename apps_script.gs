@@ -2,9 +2,13 @@
  * ============================================================
  * 徐嘉賢診所員工分紅自動化系統 - Apps Script
  * ============================================================
- * 版本：v1.2
+ * 版本：v1.3
  * 更新日期：2026-05-13
  * 變更紀錄：
+ *   v1.3 — Form 2 欄位重新命名:「執行員工」→「執行人員」;
+ *          「患者代號」說明文字改為「請填病歷號碼,避免重複收案」。
+ *          新增 migrateMetaFormFieldNames() 給既有部署一鍵遷移。
+ *          onMetaFormSubmit / syncEmployeesToForms 同時支援新舊名稱。
  *   v1.2 — 新增 createBothForms():一鍵自動建立兩張 Google Form,
  *          連結回應到當前 Sheets,Form ID 自動存入 ScriptProperties。
  *          syncEmployeesToForms() 改從 ScriptProperties 讀 Form ID,
@@ -223,13 +227,13 @@ function buildMetaForm_() {
       .setRequired(true);
 
   form.addListItem()
-      .setTitle('執行員工')
+      .setTitle('執行人員')
       .setChoiceValues(['(待同步)'])
       .setRequired(true);
 
   form.addTextItem()
       .setTitle('患者代號')
-      .setHelpText('末三碼或姓名末字,避免重複收案')
+      .setHelpText('請填病歷號碼,避免重複收案')
       .setRequired(false);
 
   form.addTextItem()
@@ -298,7 +302,9 @@ function syncEmployeesToForms() {
   }
 
   if (ids.meta) {
+    // 同時支援新舊欄位名稱(v1.3 改名「執行員工」→「執行人員」)
     updateFormChoices(ids.meta, {
+      '執行人員': { type: 'list', list: active },
       '執行員工': { type: 'list', list: active }
     });
   } else {
@@ -398,13 +404,14 @@ function onDailyFormSubmit(e) {
 function onMetaFormSubmit(e) {
   try {
     const r = e.namedValues;
-    // 守衛:用 Form 2 獨有欄位「活動類型」+「執行員工」判斷是否該由本函式處理。
-    if (!r || !r['活動類型'] || !r['執行員工']) return;
+    // 守衛:用 Form 2 獨有欄位「活動類型」+「執行人員/員工」判斷是否該由本函式處理。
+    // v1.3 後欄位改名為「執行人員」,保留「執行員工」向下相容。
+    if (!r || !r['活動類型'] || !(r['執行人員'] || r['執行員工'])) return;
 
     const date = r['日期'][0];
     const period = r['時段'] && r['時段'][0] ? r['時段'][0] : '';
     const type = r['活動類型'][0];
-    const emp  = r['執行員工'][0];
+    const emp  = (r['執行人員'] && r['執行人員'][0]) || r['執行員工'][0];
 
     let amount = 0;
     let label = '';
@@ -449,6 +456,46 @@ function testCalculation() {
     const result = bonus === c.expected ? '✓' : '✗';
     Logger.log(result + ' 看診' + c.visits + '人/流感' + c.flu + '支 → ' + bonus + '元(預期 ' + c.expected + '元)');
   });
+}
+
+
+// ============================================================
+// 輔助函數:遷移既有 Form 2 欄位名稱(v1.3 改名)
+// 用法:在 Apps Script 編輯器手動執行一次即可
+// ============================================================
+
+function migrateMetaFormFieldNames() {
+  const ids = getFormIds_();
+  if (!ids.meta) {
+    Logger.log('錯誤:找不到 Form 2 ID,請先執行 createBothForms()');
+    return;
+  }
+
+  const form = FormApp.openById(ids.meta);
+  let changed = 0;
+
+  form.getItems().forEach(item => {
+    const title = item.getTitle().trim();
+
+    if (title === '執行員工') {
+      item.setTitle('執行人員');
+      Logger.log('✓ 欄位標題:「執行員工」→「執行人員」');
+      changed++;
+    }
+
+    if (title === '患者代號') {
+      item.setHelpText('請填病歷號碼,避免重複收案');
+      Logger.log('✓ 「患者代號」說明文字已更新為「請填病歷號碼,避免重複收案」');
+      changed++;
+    }
+  });
+
+  if (changed === 0) {
+    Logger.log('沒有發現需要遷移的欄位(可能已是 v1.3 新名)。');
+  } else {
+    Logger.log('遷移完成,共更新 ' + changed + ' 處。');
+    Logger.log('建議接著手動執行一次 syncEmployeesToForms() 重新同步員工名單。');
+  }
 }
 
 

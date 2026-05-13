@@ -2,9 +2,13 @@
  * ============================================================
  * 徐嘉賢診所員工分紅自動化系統 - Apps Script
  * ============================================================
- * 版本：v1.4
+ * 版本：v1.5
  * 更新日期：2026-05-13
  * 變更紀錄：
+ *   v1.5 — Form 2「病歷號」改成「可多筆」(逗號/換行/頓號分隔),
+ *          腳本自動拆並產生多列分紅明細。「分紅明細」新增 I 欄「病歷號」
+ *          追溯每筆分紅是哪位病人。分紅類別改集中設定 (BONUS_CATEGORIES),
+ *          未來新增「衛教推廣」「SLIT」等類別只改一處。
  *   v1.4 — Form 2 欄位「患者代號」整個改名為「病歷號」;
  *          migrateMetaFormFieldNames() 同時處理此遷移。
  *   v1.3 — Form 2 欄位重新命名:「執行員工」→「執行人員」;
@@ -48,8 +52,30 @@ const THRESHOLD_VISITS = 60;   // 看診人數門檻
 const UNIT_PRICE       = 5;    // 超門檻每人單價
 const FLU_PRICE        = 5;    // 自費流感每支單價
 const DUTY_BONUS       = 100;  // 值日生津貼
-const META_REGISTER    = 100;  // 代謝收案
-const META_FOLLOWUP    = 20;   // 代謝追蹤
+const META_REGISTER    = 100;  // 代謝收案 (保留向下相容,實際金額讀 BONUS_CATEGORIES)
+const META_FOLLOWUP    = 20;   // 代謝追蹤 (保留向下相容)
+
+/**
+ * 分紅類別中央設定 (v1.5 新增)
+ * ----------------------------------------
+ * 要新增類別?(例如未來加「衛教推廣」「SLIT 服務」)
+ *   1. 在這裡加一筆 entry, key 必須與 Form 2「活動類型」下拉選項字串完全一致
+ *   2. 到 Form 2 編輯頁手動把新選項加進「活動類型」下拉
+ *   3. 到「單價參數」分頁加一列記錄該類別單價 (供日後對帳)
+ *
+ * 欄位說明:
+ *   label       — 寫入「分紅明細」E 欄的類型名稱
+ *   amount      — 每筆金額
+ *   perPatient  — true: 病歷號填幾筆就產幾列分紅 (每筆獨立計算)
+ *                false: 不論病歷號幾筆,只記 1 列 (用於非依病人計算的津貼)
+ */
+const BONUS_CATEGORIES = {
+  '收案': { label: '代謝-收案', amount: 100, perPatient: true },
+  '追蹤': { label: '代謝-追蹤', amount: 20,  perPatient: true }
+  // 範例(將來新增):
+  // '衛教推廣': { label: '衛教推廣', amount: 50, perPatient: false },
+  // 'SLIT 服務': { label: 'SLIT-服務', amount: 30, perPatient: true },
+};
 
 // Form ID 從 ScriptProperties 動態讀取(由 createBothForms 自動寫入)
 function getFormIds_() {
@@ -212,7 +238,7 @@ function buildDailyForm_() {
 
 function buildMetaForm_() {
   const form = FormApp.create('代謝症候群活動記錄');
-  form.setDescription('每筆收案或追蹤填一張。');
+  form.setDescription('同一人同一活動類型多筆病歷號可一張填完(病歷號用逗號分隔)。\n不同人或不同活動類型請分開填。');
 
   form.addDateItem()
       .setTitle('日期')
@@ -235,7 +261,7 @@ function buildMetaForm_() {
 
   form.addTextItem()
       .setTitle('病歷號')
-      .setHelpText('避免重複收案')
+      .setHelpText('多筆請用逗號分隔(例如:001,002,003),每筆獨立計算分紅')
       .setRequired(false);
 
   form.addTextItem()
@@ -371,6 +397,7 @@ function onDailyFormSubmit(e) {
       Logger.log('錯誤:找不到「' + SHEET_DETAIL + '」工作表');
       return;
     }
+    ensureChartNoColumn_(detail);
 
     const now = new Date();
     const rows = [];
@@ -378,17 +405,17 @@ function onDailyFormSubmit(e) {
     // 1. 每位當班員工的基礎分紅(僅當金額 > 0 時寫入,避免 0 元的空紀錄)
     if (baseBonus > 0) {
       employees.forEach(emp => {
-        rows.push([now, date, period, emp, '基礎分紅', baseBonus, visits, flu]);
+        rows.push([now, date, period, emp, '基礎分紅', baseBonus, visits, flu, '']);
       });
     }
 
     // 2. 值日生津貼(僅上午/下午、且不是「無」)
     if (duty && duty !== '無' && (period === '上午' || period === '下午')) {
-      rows.push([now, date, period, duty, '值日生津貼', DUTY_BONUS, '', '']);
+      rows.push([now, date, period, duty, '值日生津貼', DUTY_BONUS, '', '', '']);
     }
 
     if (rows.length > 0) {
-      detail.getRange(detail.getLastRow() + 1, 1, rows.length, 8).setValues(rows);
+      detail.getRange(detail.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
     }
 
     Logger.log('當班結帳處理完成:' + date + ' ' + period + ',基礎' + baseBonus + '元/人 × ' + employees.length + '人' + (duty && duty !== '無' ? ',值日生' + duty : ''));
@@ -407,33 +434,72 @@ function onMetaFormSubmit(e) {
   try {
     const r = e.namedValues;
     // 守衛:用 Form 2 獨有欄位「活動類型」+「執行人員/員工」判斷是否該由本函式處理。
-    // v1.3 後欄位改名為「執行人員」,保留「執行員工」向下相容。
     if (!r || !r['活動類型'] || !(r['執行人員'] || r['執行員工'])) return;
 
     const date = r['日期'][0];
     const period = r['時段'] && r['時段'][0] ? r['時段'][0] : '';
-    const type = r['活動類型'][0];
+    const type = String(r['活動類型'][0]).trim();
     const emp  = (r['執行人員'] && r['執行人員'][0]) || r['執行員工'][0];
+    const chartRaw = (r['病歷號'] && r['病歷號'][0])
+                   || (r['患者代號'] && r['患者代號'][0])
+                   || '';
 
-    let amount = 0;
-    let label = '';
-    if (type.includes('收案')) {
-      amount = META_REGISTER;
-      label = '代謝-收案';
-    } else if (type.includes('追蹤')) {
-      amount = META_FOLLOWUP;
-      label = '代謝-追蹤';
-    } else {
-      Logger.log('警告:無法辨識的活動類型「' + type + '」,跳過');
+    // 從中央設定找對應類別 (支援部分字串相符,例如「收案」匹配「收案」key)
+    let category = null;
+    for (const key in BONUS_CATEGORIES) {
+      if (type === key || type.indexOf(key) !== -1) {
+        category = BONUS_CATEGORIES[key];
+        break;
+      }
+    }
+    if (!category) {
+      Logger.log('警告:無法辨識的活動類型「' + type + '」。' +
+                 '請檢查 BONUS_CATEGORIES 是否需新增此類別。跳過此筆。');
       return;
     }
 
-    const detail = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DETAIL);
-    detail.appendRow([new Date(), date, period, emp, label, amount, '', '']);
+    // 拆病歷號 (支援半形逗號、全形逗號、頓號、換行)
+    const chartNos = chartRaw.split(/[,\n，、]/).map(s => s.trim()).filter(s => s);
 
-    Logger.log('代謝症候群處理完成:' + date + ' ' + emp + ' ' + label + ' ' + amount + '元');
+    // 決定要寫幾列:perPatient 類別依病歷號筆數;否則固定 1 列
+    const count = category.perPatient ? Math.max(1, chartNos.length) : 1;
+
+    const detail = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DETAIL);
+    if (!detail) {
+      Logger.log('錯誤:找不到「' + SHEET_DETAIL + '」工作表');
+      return;
+    }
+
+    // 確保第 9 欄「病歷號」標題存在 (v1.5 schema)
+    ensureChartNoColumn_(detail);
+
+    const now = new Date();
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const chartNo = chartNos[i] || '';
+      rows.push([now, date, period, emp, category.label, category.amount,
+                 '', '', chartNo]);
+    }
+    detail.getRange(detail.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+
+    const total = category.amount * count;
+    Logger.log('代謝症候群處理完成:' + date + ' ' + emp + ' ' + category.label +
+               ' x' + count + ' = ' + total + '元' +
+               (chartNos.length ? '(病歷號 ' + chartNos.join(',') + ')' : ''));
   } catch (err) {
     Logger.log('onMetaFormSubmit 錯誤:' + err.message + '\n' + err.stack);
+  }
+}
+
+function ensureChartNoColumn_(detail) {
+  const lastCol = detail.getLastColumn();
+  if (lastCol < 9) {
+    detail.getRange(1, 9).setValue('病歷號');
+  } else {
+    const header = detail.getRange(1, 9).getValue();
+    if (header !== '病歷號') {
+      detail.getRange(1, 9).setValue('病歷號');
+    }
   }
 }
 
@@ -476,6 +542,14 @@ function migrateMetaFormFieldNames() {
   const form = FormApp.openById(ids.meta);
   let changed = 0;
 
+  // 更新表單描述為 v1.5 多筆病歷號版
+  const newDesc = '同一人同一活動類型多筆病歷號可一張填完(病歷號用逗號分隔)。\n不同人或不同活動類型請分開填。';
+  if (form.getDescription() !== newDesc) {
+    form.setDescription(newDesc);
+    Logger.log('✓ Form 2 表單說明已更新為 v1.5 多筆版');
+    changed++;
+  }
+
   form.getItems().forEach(item => {
     const title = item.getTitle().trim();
 
@@ -490,8 +564,8 @@ function migrateMetaFormFieldNames() {
         item.setTitle('病歷號');
         Logger.log('✓ 欄位標題:「患者代號」→「病歷號」');
       }
-      item.setHelpText('避免重複收案');
-      Logger.log('✓ 「病歷號」說明文字已更新');
+      item.setHelpText('多筆請用逗號分隔(例如:001,002,003),每筆獨立計算分紅');
+      Logger.log('✓ 「病歷號」說明文字已更新(v1.5 支援多筆)');
       changed++;
     }
   });

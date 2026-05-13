@@ -180,12 +180,12 @@ def build_detail_sheet(wb):
     ws = wb.create_sheet("分紅明細")
     headers = [
         "寫入時間", "日期", "時段", "員工", "分紅類型",
-        "金額", "看診人數", "流感支數",
+        "金額", "看診人數", "流感支數", "病歷號",
     ]
     ws.append(headers)
     style_header_row(ws, 1, len(headers))
 
-    set_col_widths(ws, [18, 12, 10, 12, 14, 10, 12, 12])
+    set_col_widths(ws, [18, 12, 10, 12, 14, 10, 12, 12, 14])
     ws.freeze_panes = "A2"
 
     add_note(ws, "A1",

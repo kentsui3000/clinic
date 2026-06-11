@@ -232,25 +232,54 @@ def build_summary_sheet(wb):
         ' LABEL SUM(F) ' + "'小計'" + '", 1)'
     )
 
-    # 區塊 3：指定月份查詢（手動）
+    # 區塊 3：指定月份查詢（下拉選單）
     ws["H1"] = "查詢年月"
     ws["H1"].font = Font(name="Microsoft JhengHei", size=11, bold=True, color="C00000")
-    ws["H2"] = "2026-04"
+    ws["H2"] = "2026-06"
+    ws["H2"].number_format = "@"  # 強制純文字,避免被解讀為日期
     ws["H2"].alignment = CENTER
     ws["H2"].border = BORDER
-    add_note(ws, "H2", "輸入欲查詢的年月（格式：YYYY-MM）。修改後 I 欄表格會自動更新。")
+    add_note(ws, "H2", "從下拉選單選擇要查詢的年月。修改後右側 I 欄表格會自動更新。")
+
+    # 產生 V 欄(隱藏)月份清單,供 H2 下拉選單引用
+    # 範圍:2024-01 ~ 2030-12 (84 個月,涵蓋過去與未來幾年)
+    months = []
+    for year in range(2024, 2031):
+        for mon in range(1, 13):
+            months.append(f"{year:04d}-{mon:02d}")
+    for i, m in enumerate(months, start=1):
+        ws.cell(row=i, column=22).value = m  # 22 = V 欄
+        ws.cell(row=i, column=22).number_format = "@"
+    ws.column_dimensions["V"].hidden = True
+    ws.column_dimensions["V"].width = 12
+
+    # H2 加上下拉式資料驗證,引用 V 欄
+    from openpyxl.worksheet.datavalidation import DataValidation
+    dv = DataValidation(
+        type="list",
+        formula1=f"=$V$1:$V${len(months)}",
+        allow_blank=False,
+        showDropDown=False,  # openpyxl 詭異命名:False 才會顯示下拉箭頭
+    )
+    dv.error = "請從下拉選單選擇年月"
+    dv.errorTitle = "無效年月"
+    dv.prompt = "點此選擇要查詢的年月"
+    dv.promptTitle = "查詢年月"
+    ws.add_data_validation(dv)
+    dv.add("H2")
 
     ws["I1"] = "區塊 3：指定月份各員工總分紅"
     ws["I1"].font = TITLE_FONT
     ws.merge_cells("I1:J1")
+    # 用 LEFT(H2,7) 確保只取「YYYY-MM」7 字元,即使 H2 被誤判為日期也能修正
     ws["I2"] = (
         '=QUERY(\'分紅明細\'!B:F,'
         '"SELECT D, SUM(F)'
-        " WHERE B >= date '\"&H2&\"-01'"
-        " AND B <= date '\"&TEXT(EOMONTH(DATEVALUE(H2&\"-01\"),0),\"yyyy-MM-dd\")&\"'"
+        " WHERE B >= date '\"&LEFT(H2,7)&\"-01'"
+        " AND B <= date '\"&TEXT(EOMONTH(DATEVALUE(LEFT(H2,7)&\"-01\"),0),\"yyyy-MM-dd\")&\"'"
         ' GROUP BY D'
         ' ORDER BY SUM(F) DESC'
-        ' LABEL SUM(F) ' + "'TARGET月總分紅'" + '", 1)'
+        ' LABEL SUM(F) ' + "'查詢月總分紅'" + '", 1)'
     )
 
     # 區塊 4：本月診次彙總（cross-check 用）

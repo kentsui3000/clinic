@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>診所薪資系統 — 介面 Mockup</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Noto Sans TC','Microsoft JhengHei','Segoe UI',sans-serif; }
+  body { margin:0; background:#f0f1f3; color:#202124; }
+
+  /* 頂部說明條 */
+  .mock-note { background:#fff3cd; border-bottom:1px solid #ffe69c; padding:10px 16px; font-size:13px; color:#664d03; }
+  .mock-note b { color:#7a5b00; }
+
+  /* Google Sheets 外框 */
+  .gs-bar { background:#fff; border-bottom:1px solid #e0e0e0; padding:8px 16px; display:flex; align-items:center; gap:10px; }
+  .gs-logo { width:26px;height:26px;background:#0f9d58;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px; }
+  .gs-title { font-size:17px; font-weight:500; }
+  .gs-menu { background:#0b8043;color:#fff;font-size:13px;padding:5px 12px;border-radius:4px;margin-left:auto; }
+
+  .layout { display:flex; align-items:flex-start; }
+  .sheet-wrap { flex:1; padding:16px; overflow:auto; }
+
+  /* 試算表分頁 */
+  .tabs { display:flex; gap:2px; margin-bottom:0; }
+  .tab { background:#e8eaed; padding:7px 16px; font-size:13px; border-radius:8px 8px 0 0; cursor:pointer; color:#5f6368; border:1px solid transparent; border-bottom:none; }
+  .tab.active { background:#fff; color:#0b8043; font-weight:600; box-shadow:0 -1px 3px rgba(0,0,0,.06); }
+
+  .sheet-card { background:#fff; border-radius:0 8px 8px 8px; box-shadow:0 1px 4px rgba(0,0,0,.1); overflow:auto; }
+  .sheet-pane { display:none; }
+  .sheet-pane.active { display:block; }
+
+  table { border-collapse:collapse; width:100%; font-size:13px; white-space:nowrap; }
+  th { background:#0b8043; color:#fff; font-weight:600; padding:9px 12px; text-align:left; position:sticky; top:0; }
+  td { padding:8px 12px; border-bottom:1px solid #eef0f2; }
+  tr:nth-child(even) td { background:#f8fbf9; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .total { font-weight:700; color:#0b8043; }
+  .role-nurse { color:#1a73e8; font-weight:600; }
+  .role-admin { color:#9334e6; font-weight:600; }
+  .role-pharm { color:#e8710a; font-weight:600; }
+  .detail { font-size:11px; color:#5f6368; white-space:normal; min-width:320px; max-width:420px; line-height:1.5; }
+  .hl { color:#0b8043; font-weight:600; }
+
+  .pane-title { padding:12px 16px; font-size:14px; color:#5f6368; border-bottom:1px solid #eef0f2; background:#fafafa; }
+  .pane-title b { color:#202124; }
+
+  /* 側邊欄 mock */
+  .sidebar { width:330px; background:#f8f9fa; border-left:1px solid #e0e0e0; padding:14px; min-height:100vh; }
+  .sb-header { text-align:center; padding:14px; border-radius:12px; color:#fff; background:linear-gradient(135deg,#667eea,#764ba2); margin-bottom:12px; }
+  .sb-header h1 { margin:0; font-size:17px; }
+  .sb-header p { margin:6px 0 0; font-size:11px; opacity:.9; }
+  .sb-sec { background:#fff; border-radius:10px; padding:14px; margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  .sb-sec h2 { margin:0 0 10px; font-size:14px; color:#1a73e8; display:flex; align-items:center; gap:6px; }
+  .sb-label { font-size:12px; color:#5f6368; margin-bottom:5px; display:block; }
+  .sb-input { width:100%; padding:8px 10px; border:1px solid #dadce0; border-radius:7px; font-size:13px; background:#fff; margin-bottom:10px; }
+  .sb-drop { border:2px dashed #dadce0; border-radius:8px; padding:18px; text-align:center; color:#5f6368; font-size:12px; background:#fafafa; margin-bottom:10px; }
+  .sb-drop .ic { font-size:26px; }
+  .sb-btn { width:100%; padding:10px; border:none; border-radius:7px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; }
+  .b-blue { background:linear-gradient(135deg,#1a73e8,#1557b0); }
+  .b-green { background:linear-gradient(135deg,#34a853,#1e8e3e); }
+
+  h3.section-h { margin:22px 16px 6px; font-size:13px; color:#80868b; letter-spacing:.5px; }
+  .legend { padding:10px 16px; font-size:12px; color:#5f6368; }
+  .legend span { display:inline-block; margin-right:14px; }
+</style>
+</head>
+<body>
+
+<div class="mock-note">
+  ⚠️ 這是<b>介面示意 (mockup)</b>，裡面是<b>假資料</b>，純粹給你看「做出來大概長這樣」。還沒接你真正的 Google 試算表。下方分頁可以點切換。
+</div>
+
+<div class="gs-bar">
+  <div class="gs-logo">📊</div>
+  <div class="gs-title">診所薪資自動化系統</div>
+  <div class="gs-menu">🏥 智慧薪資助理 ▾</div>
+</div>
+
+<div class="layout">
+  <div class="sheet-wrap">
+
+    <div class="tabs">
+      <div class="tab active" onclick="showPane('payroll',this)">💰 薪資計算結果</div>
+      <div class="tab" onclick="showPane('settings',this)">⚙️ 員工薪資設定</div>
+      <div class="tab" onclick="showPane('roster',this)">📅 班表</div>
+      <div class="tab" onclick="showPane('clock',this)">🕐 打卡紀錄</div>
+    </div>
+
+    <!-- 薪資計算結果 -->
+    <div class="sheet-card">
+      <div class="sheet-pane active" id="payroll">
+        <div class="pane-title">2026 年 6 月　當月應工時 <b>168 小時</b>（30 天 − 週末 8 − 國定假日 1，×8）</div>
+        <table>
+          <thead>
+            <tr>
+              <th>員工</th><th>職類</th><th class="num">月薪</th><th class="num">時薪</th>
+              <th class="num">應工時</th><th class="num">實際工時</th><th class="num">加班時數</th><th class="num">加班費</th>
+              <th class="num">分紅</th><th class="num">值日費</th><th class="num">應發合計</th><th>計算明細</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>林淑芬</td><td class="role-nurse">護理師</td>
+              <td class="num">48,000</td><td class="num">300</td>
+              <td class="num">168</td><td class="num">176.5</td><td class="num">10.5</td><td class="num">3,618</td>
+              <td class="num">8,500</td><td class="num">600</td><td class="num total">60,718</td>
+              <td class="detail">月薪 48,000（時薪 300）＋ <span class="hl">加班費 3,618</span>（加班 10.5 小時：一般加班 3 天、ABC三班 1 天）＋ 分紅 8,500 ＋ 值日費 600</td>
+            </tr>
+            <tr>
+              <td>陳怡君</td><td class="role-nurse">護理師</td>
+              <td class="num">45,000</td><td class="num">281.25</td>
+              <td class="num">168</td><td class="num">169</td><td class="num">4.0</td><td class="num">1,355</td>
+              <td class="num">7,200</td><td class="num">400</td><td class="num total">53,955</td>
+              <td class="detail">月薪 45,000（時薪 281.25）＋ <span class="hl">加班費 1,355</span>（加班 4 小時：一般加班 2 天）＋ 分紅 7,200 ＋ 值日費 400</td>
+            </tr>
+            <tr>
+              <td>王美玲</td><td class="role-admin">行政</td>
+              <td class="num">38,000</td><td class="num">237.5</td>
+              <td class="num">168</td><td class="num">164</td><td class="num">2.0</td><td class="num">636</td>
+              <td class="num">0</td><td class="num">400</td><td class="num total">39,036</td>
+              <td class="detail">月薪 38,000（時薪 237.5）＋ <span class="hl">加班費 636</span>（加班 2 小時：一般加班 1 天）＋ 分紅 0 ＋ 值日費 400</td>
+            </tr>
+            <tr>
+              <td>張志豪</td><td class="role-pharm">藥師</td>
+              <td class="num">60,000</td><td class="num">375</td>
+              <td class="num">—</td><td class="num">158</td><td class="num">158</td><td class="num">79,365</td>
+              <td class="num">5,000</td><td class="num">0</td><td class="num total">144,365</td>
+              <td class="detail">月薪 60,000 ＋ <span class="hl">全時數加班費 79,365</span> = 158 小時 × 時薪 375 × 1.34 ＋ 分紅 5,000　<b style="color:#e8710a">← 這欄就是要跟你確認的「藥師疊不疊月薪」</b></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="legend">
+          <span>🔵 護理師</span><span>🟣 行政</span><span>🟠 藥師</span>
+          ｜ 每位員工最後一欄都有白話明細，方便你逐筆對帳。
+        </div>
+      </div>
+    </div>
+
+    <!-- 員工薪資設定 -->
+    <div class="sheet-card">
+      <div class="sheet-pane" id="settings">
+        <div class="pane-title">你只要填這張表的 <b>職類</b> 和 <b>月薪</b>，時薪系統自動算（月薪 ÷ 160）</div>
+        <table>
+          <thead><tr><th>員工姓名</th><th>職類</th><th class="num">月薪</th><th class="num">時薪（留空＝自動）</th><th>備註</th></tr></thead>
+          <tbody>
+            <tr><td>林淑芬</td><td class="role-nurse">護理師</td><td class="num">48,000</td><td class="num" style="color:#aaa">自動 300</td><td></td></tr>
+            <tr><td>陳怡君</td><td class="role-nurse">護理師</td><td class="num">45,000</td><td class="num" style="color:#aaa">自動 281.25</td><td></td></tr>
+            <tr><td>王美玲</td><td class="role-admin">行政</td><td class="num">38,000</td><td class="num" style="color:#aaa">自動 237.5</td><td></td></tr>
+            <tr><td>張志豪</td><td class="role-pharm">藥師</td><td class="num">60,000</td><td class="num" style="color:#aaa">自動 375</td><td>加班費直接計算</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 班表 -->
+    <div class="sheet-card">
+      <div class="sheet-pane" id="roster">
+        <div class="pane-title">上傳班表照片/PDF 由 AI 自動填，或手動填。系統靠這張判斷「<b>當天是否連上 A、B、C 三班</b>」</div>
+        <table>
+          <thead><tr><th>員工姓名</th><th>日期</th><th>班別</th><th>備註</th></tr></thead>
+          <tbody>
+            <tr><td>林淑芬</td><td>2026-06-03</td><td><b style="color:#e8710a">A,B,C</b></td><td>三班連上 → 當天加班一律 ×1.34</td></tr>
+            <tr><td>林淑芬</td><td>2026-06-04</td><td>A,B</td><td></td></tr>
+            <tr><td>陳怡君</td><td>2026-06-03</td><td>B,C</td><td></td></tr>
+            <tr><td>王美玲</td><td>2026-06-05</td><td>A</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 打卡紀錄 -->
+    <div class="sheet-card">
+      <div class="sheet-pane" id="clock">
+        <div class="pane-title">打卡紙由 AI 辨識自動填入（你現在系統已經有這塊）</div>
+        <table>
+          <thead><tr><th>員工姓名</th><th>日期</th><th>上班</th><th>下班</th><th class="num">當日工時</th></tr></thead>
+          <tbody>
+            <tr><td>林淑芬</td><td>2026-06-03</td><td>08:30</td><td>22:00</td><td class="num">13.5</td></tr>
+            <tr><td>林淑芬</td><td>2026-06-04</td><td>08:30</td><td>18:00</td><td class="num">9.5</td></tr>
+            <tr><td>王美玲</td><td>2026-06-05</td><td>09:00</td><td>20:00</td><td class="num">11.0</td></tr>
+            <tr><td>張志豪</td><td>2026-06-05</td><td>10:00</td><td>21:30</td><td class="num">11.5</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 側邊欄 mock -->
+  <div class="sidebar">
+    <div class="sb-header">
+      <h1>智慧薪資助理</h1>
+      <p>AI 圖像辨識 · 自動化薪資計算</p>
+    </div>
+
+    <div class="sb-sec">
+      <h2>🕐 區塊 A — 上傳打卡紙</h2>
+      <span class="sb-label">選擇員工</span>
+      <select class="sb-input"><option>林淑芬</option></select>
+      <div class="sb-drop"><div class="ic">📸</div>點擊選擇或拖曳圖片</div>
+      <button class="sb-btn b-blue">開始辨識打卡紀錄</button>
+    </div>
+
+    <div class="sb-sec">
+      <h2>📒 區塊 B — 上傳手寫帳本</h2>
+      <div class="sb-drop"><div class="ic">📸</div>點擊選擇或拖曳圖片</div>
+      <button class="sb-btn b-green">開始辨識分紅/值班</button>
+    </div>
+
+    <div class="sb-sec" style="border:2px solid #34a853;">
+      <h2>📅 區塊 B2 — 上傳班表 <span style="font-size:10px;background:#34a853;color:#fff;padding:2px 6px;border-radius:8px;">新增</span></h2>
+      <div class="sb-drop"><div class="ic">📸</div>點擊選擇或拖曳圖片 / PDF</div>
+      <button class="sb-btn b-green">開始辨識班表</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPane(id, el){
+    document.querySelectorAll('.sheet-pane').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    el.classList.add('active');
+  }
+</script>
+</body>
+</html>

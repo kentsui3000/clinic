@@ -509,6 +509,32 @@
     <div class="status-message" id="statusLedger"></div>
   </div>
 
+  <!-- Section B2: 上傳班表 -->
+  <div class="section">
+    <h2 class="section-title">
+      <span class="section-icon">📅</span>
+      區塊 B2 - 上傳班表 (A/B/C 班)
+    </h2>
+
+    <div class="form-group">
+      <label class="form-label">上傳班表照片或 PDF（用來判斷是否連上三班）</label>
+      <div class="file-upload-area" id="rosterArea" onclick="document.getElementById('rosterInput').click()">
+        <div class="file-upload-icon">📸</div>
+        <div class="file-upload-text">點擊選擇或拖曳圖片 / PDF</div>
+        <div class="file-name" id="rosterFileName"></div>
+        <img class="preview-image" id="rosterPreview" alt="Preview">
+      </div>
+      <input type="file" id="rosterInput" class="hidden-input" accept="image/*,application/pdf" onchange="handleRosterSelect(this)">
+    </div>
+
+    <button class="btn btn-secondary" id="btnProcessRoster" onclick="processRoster()" disabled>
+      <span id="btnRosterText">開始辨識班表</span>
+      <span class="spinner" id="spinnerRoster" style="display: none;"></span>
+    </button>
+
+    <div class="status-message" id="statusRoster"></div>
+  </div>
+
   <!-- Section C: 員工管理 -->
   <div class="section">
     <h2 class="section-title section-collapsible" onclick="toggleSection('employeeSection')">
@@ -573,6 +599,7 @@
     // 全域變數
     let timeCardBase64 = null;
     let ledgerBase64 = null;
+    let rosterBase64 = null;
 
     // 頁面載入時初始化
     document.addEventListener('DOMContentLoaded', function() {
@@ -605,7 +632,7 @@
 
     // 設定拖放功能
     function setupDragAndDrop() {
-      ['timeCardArea', 'ledgerArea'].forEach(function(areaId) {
+      ['timeCardArea', 'ledgerArea', 'rosterArea'].forEach(function(areaId) {
         const area = document.getElementById(areaId);
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
@@ -628,9 +655,12 @@
 
         area.addEventListener('drop', function(e) {
           const file = e.dataTransfer.files[0];
-          if (file && file.type.startsWith('image/')) {
+          const isAllowed = file && (file.type.startsWith('image/') || file.type === 'application/pdf');
+          if (isAllowed) {
             if (areaId === 'timeCardArea') {
               handleFile(file, 'timeCard');
+            } else if (areaId === 'rosterArea') {
+              handleFile(file, 'roster');
             } else {
               handleFile(file, 'ledger');
             }
@@ -658,12 +688,21 @@
       }
     }
 
+    // 處理班表檔案選擇
+    function handleRosterSelect(input) {
+      if (input.files && input.files[0]) {
+        handleFile(input.files[0], 'roster');
+      }
+    }
+
     // 處理檔案讀取與預覽
     function handleFile(file, type) {
       const reader = new FileReader();
 
       reader.onload = function(e) {
         const base64 = e.target.result;
+
+        const isImage = file.type.startsWith('image/');
 
         if (type === 'timeCard') {
           timeCardBase64 = base64;
@@ -672,6 +711,18 @@
           document.getElementById('timeCardPreview').src = base64;
           document.getElementById('timeCardPreview').classList.add('show');
           updateTimeCardButton();
+        } else if (type === 'roster') {
+          rosterBase64 = base64;
+          document.getElementById('rosterFileName').textContent = file.name;
+          document.getElementById('rosterArea').classList.add('has-file');
+          const rp = document.getElementById('rosterPreview');
+          if (isImage) {
+            rp.src = base64;
+            rp.classList.add('show');
+          } else {
+            rp.classList.remove('show'); // PDF 不預覽縮圖
+          }
+          updateRosterButton();
         } else {
           ledgerBase64 = base64;
           document.getElementById('ledgerFileName').textContent = file.name;
@@ -696,6 +747,12 @@
     function updateLedgerButton() {
       const btn = document.getElementById('btnProcessLedger');
       btn.disabled = !ledgerBase64;
+    }
+
+    // 更新班表按鈕狀態
+    function updateRosterButton() {
+      const btn = document.getElementById('btnProcessRoster');
+      btn.disabled = !rosterBase64;
     }
 
     // 員工選擇變更時
@@ -757,12 +814,43 @@
         .processLedgerImage(ledgerBase64);
     }
 
+    // 處理班表辨識
+    function processRoster() {
+      if (!rosterBase64) {
+        showStatus('statusRoster', 'error', '請上傳班表圖片或 PDF');
+        return;
+      }
+
+      setProcessing('roster', true);
+      showStatus('statusRoster', 'loading', '⏳ AI 正在辨識班表，請稍候...');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setProcessing('roster', false);
+          if (result.success) {
+            showStatus('statusRoster', 'success', '✅ ' + result.message);
+            resetRosterForm();
+          } else {
+            showStatus('statusRoster', 'error', '❌ ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          setProcessing('roster', false);
+          showStatus('statusRoster', 'error', '❌ 處理失敗: ' + error.message);
+        })
+        .processRosterImage(rosterBase64);
+    }
+
     // 設定處理中狀態
     function setProcessing(type, isProcessing) {
       if (type === 'timeCard') {
         document.getElementById('btnProcessTimeCard').disabled = isProcessing;
         document.getElementById('btnTimeCardText').textContent = isProcessing ? '辨識中...' : '開始辨識打卡紀錄';
         document.getElementById('spinnerTimeCard').style.display = isProcessing ? 'inline-block' : 'none';
+      } else if (type === 'roster') {
+        document.getElementById('btnProcessRoster').disabled = isProcessing;
+        document.getElementById('btnRosterText').textContent = isProcessing ? '辨識中...' : '開始辨識班表';
+        document.getElementById('spinnerRoster').style.display = isProcessing ? 'inline-block' : 'none';
       } else {
         document.getElementById('btnProcessLedger').disabled = isProcessing;
         document.getElementById('btnLedgerText').textContent = isProcessing ? '辨識中...' : '開始辨識分紅/值班';
@@ -796,6 +884,16 @@
       document.getElementById('ledgerArea').classList.remove('has-file');
       document.getElementById('ledgerPreview').classList.remove('show');
       updateLedgerButton();
+    }
+
+    // 重設班表表單
+    function resetRosterForm() {
+      rosterBase64 = null;
+      document.getElementById('rosterInput').value = '';
+      document.getElementById('rosterFileName').textContent = '';
+      document.getElementById('rosterArea').classList.remove('has-file');
+      document.getElementById('rosterPreview').classList.remove('show');
+      updateRosterButton();
     }
 
     // ==================== 員工管理功能 ====================

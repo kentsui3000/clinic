@@ -13,8 +13,55 @@ const SHEET_NAMES = {
   BONUS_DUTY: '分紅與值班',
   HOLIDAYS: '國定假日',
   PAYROLL: '薪資計算結果',
-  EMPLOYEES: '員工名單'
+  EMPLOYEES: '員工名單',
+  SALARY_SETTINGS: '員工薪資設定',
+  SHIFT_ROSTER: '班表'
 };
+
+// ==================== 薪資計算參數（可調整）====================
+// 所有薪資規則的「可調旋鈕」都集中在這裡，改這裡即可調整全系統的計算邏輯，
+// 不需要動到下方的計算程式。每位員工的明細欄會顯示套用後的結果，方便對帳。
+const PAYROLL_CONFIG = {
+  // 時薪基準：時薪 = 月薪 ÷ BASELINE_HOURS（固定 160，不隨當月應工時變動）
+  BASELINE_HOURS: 160,
+
+  // 正常一天的工時（計入「應工時」的上限）
+  STANDARD_DAY_HOURS: 8,
+
+  // 護理師/行政：當天工時「超過」此門檻才開始算每日加班。
+  // 你的規則是「超過 10 小時才算加班」，所以預設 10。
+  // 若想改成超過 8 小時就算加班，把這裡改成 8 即可。
+  DAILY_OT_THRESHOLD: 10,
+
+  // 護理師/行政「每日加班級距」：每滿 OT_TIER_STEP_HOURS 小時跳一階，每日重置。
+  // 前 2 小時 ×1.34、再 2 小時 ×1.67、再 2 小時 ×2.00…（以此類推，每階 +0.33）
+  OT_TIER_STEP_HOURS: 2,
+  OT_TIERS: [1.34, 1.67, 2.00, 2.33, 2.66],
+
+  // 連上 A、B、C 三班的當天：加班一律此倍率（不分級距）
+  ABC_FLAT_RATE: 1.34,
+
+  // ABC 當天的加班，從超過幾小時起算（一般正常班 8 小時以上視為加班）
+  ABC_OT_FROM_HOURS: 8,
+
+  // 藥師：不算時數，全部工時一律以此倍率計加班費
+  PHARMACIST_RATE: 1.34,
+
+  // 藥師的「月薪」是否照付（true = 月薪保障 + 全時數加班費；false = 只發加班費，不另付月薪）
+  PHARMACIST_KEEP_BASE_SALARY: true,
+
+  // 職類關鍵字（薪資設定分頁的「職類」欄填到這些字即可對應規則）
+  ROLE_PHARMACIST: '藥師',
+  ROLE_NURSE: '護理師',
+  ROLE_ADMIN: '行政'
+};
+
+// 薪資計算結果分頁的欄位（完整明細版）
+const PAYROLL_HEADERS = [
+  '年份', '月份', '員工姓名', '職類', '月薪', '時薪',
+  '當月應工時', '實際工時', '加班時數', '加班費',
+  '總分紅', '總值日費', '應發合計', '計算明細'
+];
 
 // ==================== 選單與初始化 ====================
 
@@ -31,6 +78,13 @@ function onOpen() {
     .addSubMenu(ui.createMenu('💰 薪資計算')
       .addItem('執行當月結算', 'promptCalculatePayroll'))
     .addToUi();
+}
+
+/**
+ * 取得目前的薪資計算參數（供前端顯示，非必要）
+ */
+function getPayrollConfig() {
+  return PAYROLL_CONFIG;
 }
 
 /**
@@ -263,15 +317,22 @@ function initializeSheets() {
   createSheetIfNotExists(ss, SHEET_NAMES.HOLIDAYS,
     ['日期', '假日名稱']);
 
-  // 4. 薪資計算結果
-  createSheetIfNotExists(ss, SHEET_NAMES.PAYROLL,
-    ['年份', '月份', '員工姓名', '公司應上工時', '實際上班工時', '時數差異(抵扣額度)', '總分紅', '總值日費']);
+  // 4. 薪資計算結果（完整明細版）
+  createSheetIfNotExists(ss, SHEET_NAMES.PAYROLL, PAYROLL_HEADERS);
 
   // 5. 員工名單
   createSheetIfNotExists(ss, SHEET_NAMES.EMPLOYEES,
     ['員工姓名', '建立日期']);
 
-  SpreadsheetApp.getUi().alert('✅ 系統初始化完成！\n已建立/確認所有必要分頁。');
+  // 6. 員工薪資設定（每人職類與月薪，直接在此分頁填寫）
+  createSheetIfNotExists(ss, SHEET_NAMES.SALARY_SETTINGS,
+    ['員工姓名', '職類(護理師/行政/藥師)', '月薪', '時薪(自動=月薪/160，留空即自動)', '備註']);
+
+  // 7. 班表（可手動填，或上傳班表照片/PDF 由 AI 辨識）
+  createSheetIfNotExists(ss, SHEET_NAMES.SHIFT_ROSTER,
+    ['員工姓名', '日期', '班別(A/B/C，可多班如 A,B,C)', '備註']);
+
+  SpreadsheetApp.getUi().alert('✅ 系統初始化完成！\n已建立/確認所有必要分頁。\n\n下一步：到「員工薪資設定」分頁填寫每位員工的職類與月薪。');
 }
 
 /**
@@ -495,8 +556,13 @@ function processLedgerImage(base64Image) {
  */
 function callGeminiVisionAPI(base64Image, prompt) {
   try {
-    // 移除 data URL 前綴（如果有的話）
-    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+    // 偵測 MIME 類型（支援圖片與 PDF），並移除 data URL 前綴
+    let mimeType = 'image/jpeg';
+    const mimeMatch = base64Image.match(/^data:([\w/+.-]+);base64,/);
+    if (mimeMatch) {
+      mimeType = mimeMatch[1];
+    }
+    const base64Data = base64Image.replace(/^data:[\w/+.-]+;base64,/, '');
 
     const payload = {
       contents: [{
@@ -504,7 +570,7 @@ function callGeminiVisionAPI(base64Image, prompt) {
           { text: prompt },
           {
             inline_data: {
-              mime_type: 'image/jpeg',
+              mime_type: mimeType,
               data: base64Data
             }
           }
@@ -631,7 +697,7 @@ function promptCalculatePayroll() {
 }
 
 /**
- * 計算指定月份的薪資
+ * 計算指定月份的薪資（依職類套用不同規則）
  * @param {number} year - 年份
  * @param {number} month - 月份
  * @returns {object} - 計算結果
@@ -641,79 +707,235 @@ function calculateMonthlyPayroll(year, month) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // 確保分頁存在
-    createSheetIfNotExists(ss, SHEET_NAMES.PAYROLL,
-      ['年份', '月份', '員工姓名', '公司應上工時', '實際上班工時', '時數差異(抵扣額度)', '總分紅', '總值日費']);
+    createSheetIfNotExists(ss, SHEET_NAMES.PAYROLL, PAYROLL_HEADERS);
 
-    // 1. 計算標準工時
-    const standardHours = calculateStandardHours(year, month);
+    // 1. 當月應工時（四週變形工時：天數 - 週末 - 國定假日，再 ×8）
+    const requiredHours = calculateStandardHours(year, month);
 
-    // 2. 取得打卡記錄
+    // 2. 取得各項原始資料
     const clockInRecords = getClockInRecords(year, month);
-
-    // 3. 取得分紅與值班記錄
     const bonusDutyRecords = getBonusDutyRecords(year, month);
+    const rosterMap = getShiftRosterMap(year, month);   // 每人每日的班別
+    const salaryMap = getSalarySettingsMap();           // 每人的職類與月薪
 
-    // 4. 取得員工名單
+    // 3. 員工名單
     const employees = getEmployeeList();
-
     if (employees.length === 0) {
       return { success: false, message: '尚未設定任何員工，請先在「員工名單」分頁新增員工' };
     }
 
-    // 5. 計算每位員工的薪資
+    // 4. 逐位員工計算
     const payrollData = [];
+    const warnings = [];
 
     for (const employee of employees) {
-      // 計算實際工時
-      const actualHours = clockInRecords
-        .filter(r => r.name === employee)
-        .reduce((sum, r) => sum + r.hours, 0);
+      const setting = salaryMap[employee];
+      if (!setting) {
+        warnings.push(employee + '（缺少薪資設定）');
+      }
 
-      // 計算時數差異
-      const hoursDiff = standardHours - actualHours;
+      const role = setting ? setting.role : '';
+      const monthlySalary = setting ? setting.monthlySalary : 0;
+      const hourlyRate = setting ? setting.hourlyRate : 0;
 
-      // 計算分紅與值日費總和
-      const employeeBonusDuty = bonusDutyRecords.filter(r => r.name === employee);
-      const totalBonus = employeeBonusDuty.reduce((sum, r) => sum + r.bonus, 0);
-      const totalDutyFee = employeeBonusDuty.reduce((sum, r) => sum + r.dutyFee, 0);
+      // 整理出當月每一天的工時（依日期彙總，同一天多筆打卡相加）
+      const dailyHours = aggregateDailyHours(
+        clockInRecords.filter(r => r.name === employee)
+      );
+
+      // 分紅與值日費
+      const empBonusDuty = bonusDutyRecords.filter(r => r.name === employee);
+      const totalBonus = empBonusDuty.reduce((s, r) => s + r.bonus, 0);
+      const totalDutyFee = empBonusDuty.reduce((s, r) => s + r.dutyFee, 0);
+
+      // 依職類套規則
+      const result = computePayByRole({
+        role: role,
+        monthlySalary: monthlySalary,
+        hourlyRate: hourlyRate,
+        requiredHours: requiredHours,
+        dailyHours: dailyHours,
+        roster: rosterMap[employee] || {},
+        totalBonus: totalBonus,
+        totalDutyFee: totalDutyFee
+      });
 
       payrollData.push([
-        year,
-        month,
-        employee,
-        standardHours,
-        Math.round(actualHours * 100) / 100,
-        Math.round(hoursDiff * 100) / 100,
-        totalBonus,
-        totalDutyFee
+        year, month, employee, role || '(未設定)',
+        monthlySalary, round2(hourlyRate),
+        requiredHours, round2(result.actualHours),
+        round2(result.otHours), round0(result.otPay),
+        totalBonus, totalDutyFee,
+        round0(result.grandTotal), result.detail
       ]);
     }
 
-    // 5. 清空並寫入薪資計算結果
+    // 5. 寫回薪資計算結果分頁（清空舊資料後重寫）
     const payrollSheet = ss.getSheetByName(SHEET_NAMES.PAYROLL);
-
-    // 清除舊資料（保留標題列）
     const lastRow = payrollSheet.getLastRow();
     if (lastRow > 1) {
-      payrollSheet.getRange(2, 1, lastRow - 1, 8).clearContent();
+      payrollSheet.getRange(2, 1, lastRow - 1, PAYROLL_HEADERS.length).clearContent();
     }
-
-    // 寫入新資料
     if (payrollData.length > 0) {
-      payrollSheet.getRange(2, 1, payrollData.length, 8).setValues(payrollData);
+      payrollSheet.getRange(2, 1, payrollData.length, PAYROLL_HEADERS.length).setValues(payrollData);
     }
 
-    return {
-      success: true,
-      message: `${year}年${month}月薪資計算完成！\n\n` +
-               `📊 標準工時: ${standardHours} 小時\n` +
-               `👥 已計算 ${employees.length} 位員工的薪資資料`
-    };
+    let msg = `${year}年${month}月薪資計算完成！\n\n` +
+              `📊 當月應工時: ${requiredHours} 小時\n` +
+              `👥 已計算 ${employees.length} 位員工的薪資資料`;
+    if (warnings.length > 0) {
+      msg += `\n\n⚠️ 以下員工尚未在「員工薪資設定」填寫資料，月薪/時薪以 0 計算：\n` +
+             warnings.join('、');
+    }
+
+    return { success: true, message: msg };
 
   } catch (error) {
     Logger.log('calculateMonthlyPayroll Error: ' + error.toString());
     return { success: false, message: '計算薪資時發生錯誤: ' + error.toString() };
   }
+}
+
+/**
+ * 依職類分流，回傳該員工的薪資計算結果與明細
+ * @returns {{actualHours:number, otHours:number, otPay:number, grandTotal:number, detail:string}}
+ */
+function computePayByRole(p) {
+  const isPharmacist = (p.role || '').indexOf(PAYROLL_CONFIG.ROLE_PHARMACIST) !== -1;
+  return isPharmacist ? computePharmacistPay(p) : computeNurseAdminPay(p);
+}
+
+/**
+ * 護理師 / 行政：以「每日加班」為核心
+ * - 當天工時超過門檻（預設 10 小時）才算加班；加班級距每日重置（1.34 / 1.67 / …）
+ * - 連上 A、B、C 三班的當天：加班一律 ×1.34（從超過 8 小時起算，不分級距）
+ * - 月薪照付，加班費另計
+ */
+function computeNurseAdminPay(p) {
+  const cfg = PAYROLL_CONFIG;
+  let actualHours = 0;
+  let otHours = 0;
+  let otPay = 0;
+  let abcDays = 0;
+  let otDays = 0;
+
+  Object.keys(p.dailyHours).forEach(function(dateKey) {
+    const wh = p.dailyHours[dateKey];
+    actualHours += wh;
+
+    const isABC = isAllThreeShifts(p.roster[dateKey]);
+
+    if (isABC) {
+      // 連上三班：超過正常班時數的部分一律 ×1.34
+      const dayOt = Math.max(0, wh - cfg.ABC_OT_FROM_HOURS);
+      if (dayOt > 0) {
+        otHours += dayOt;
+        otPay += dayOt * p.hourlyRate * cfg.ABC_FLAT_RATE;
+        abcDays++;
+      }
+    } else if (wh > cfg.DAILY_OT_THRESHOLD) {
+      // 一般日：超過每日門檻才算加班，級距每日重置
+      const dayOt = wh - cfg.DAILY_OT_THRESHOLD;
+      otHours += dayOt;
+      otPay += tieredOvertimePay(dayOt, p.hourlyRate);
+      otDays++;
+    }
+  });
+
+  const grandTotal = p.monthlySalary + otPay + p.totalBonus + p.totalDutyFee;
+
+  const detail =
+    `月薪 ${money(p.monthlySalary)}（時薪 ${round2(p.hourlyRate)}）` +
+    ` ＋ 加班費 ${money(round0(otPay))}（加班 ${round2(otHours)} 小時：` +
+    `一般加班 ${otDays} 天、ABC三班 ${abcDays} 天）` +
+    ` ＋ 分紅 ${money(p.totalBonus)} ＋ 值日費 ${money(p.totalDutyFee)}` +
+    `　應發合計 ${money(round0(grandTotal))}` +
+    `　[實際工時 ${round2(actualHours)} / 應工時 ${p.requiredHours}]`;
+
+  return { actualHours: actualHours, otHours: otHours, otPay: otPay, grandTotal: grandTotal, detail: detail };
+}
+
+/**
+ * 藥師：不算時數，每一分每一秒的工時都以時薪 ×PHARMACIST_RATE 計加班費
+ * 月薪是否照付由 PAYROLL_CONFIG.PHARMACIST_KEEP_BASE_SALARY 決定
+ */
+function computePharmacistPay(p) {
+  const cfg = PAYROLL_CONFIG;
+  let actualHours = 0;
+  Object.keys(p.dailyHours).forEach(function(dateKey) {
+    actualHours += p.dailyHours[dateKey];
+  });
+
+  const otPay = actualHours * p.hourlyRate * cfg.PHARMACIST_RATE;
+  const base = cfg.PHARMACIST_KEEP_BASE_SALARY ? p.monthlySalary : 0;
+  const grandTotal = base + otPay + p.totalBonus + p.totalDutyFee;
+
+  const detail =
+    (cfg.PHARMACIST_KEEP_BASE_SALARY ? `月薪 ${money(p.monthlySalary)} ＋ ` : `（月薪不另計）`) +
+    `全時數加班費 ${money(round0(otPay))} = ${round2(actualHours)} 小時 × 時薪 ${round2(p.hourlyRate)} × ${cfg.PHARMACIST_RATE}` +
+    ` ＋ 分紅 ${money(p.totalBonus)} ＋ 值日費 ${money(p.totalDutyFee)}` +
+    `　應發合計 ${money(round0(grandTotal))}`;
+
+  return { actualHours: actualHours, otHours: actualHours, otPay: otPay, grandTotal: grandTotal, detail: detail };
+}
+
+/**
+ * 每日加班級距計算（每日重置）：
+ * 前 OT_TIER_STEP_HOURS 小時用 OT_TIERS[0]，下一段用 OT_TIERS[1]，依此類推；
+ * 超過級距表的部分，沿用最後一階倍率。
+ */
+function tieredOvertimePay(otHours, hourlyRate) {
+  const cfg = PAYROLL_CONFIG;
+  const step = cfg.OT_TIER_STEP_HOURS;
+  let remaining = otHours;
+  let pay = 0;
+  let tierIndex = 0;
+
+  while (remaining > 0) {
+    const rate = cfg.OT_TIERS[Math.min(tierIndex, cfg.OT_TIERS.length - 1)];
+    const hoursThisTier = Math.min(remaining, step);
+    pay += hoursThisTier * hourlyRate * rate;
+    remaining -= hoursThisTier;
+    tierIndex++;
+  }
+  return pay;
+}
+
+/**
+ * 判斷某天的班別是否「A、B、C 三班連上」
+ * @param {string} shiftStr - 例如 "A,B,C" 或 "A、B、C"
+ */
+function isAllThreeShifts(shiftStr) {
+  if (!shiftStr) return false;
+  const s = String(shiftStr).toUpperCase();
+  return s.indexOf('A') !== -1 && s.indexOf('B') !== -1 && s.indexOf('C') !== -1;
+}
+
+/**
+ * 將同一員工的打卡記錄依日期彙總工時
+ * @returns {Object} 以 'yyyy-MM-dd' 為 key、當日總工時為 value
+ */
+function aggregateDailyHours(records) {
+  const map = {};
+  records.forEach(function(r) {
+    const key = dateKeyOf(r.date);
+    map[key] = (map[key] || 0) + (r.hours || 0);
+  });
+  return map;
+}
+
+// ---- 小工具 ----
+function dateKeyOf(d) {
+  const date = (d instanceof Date) ? d : new Date(d);
+  return Utilities.formatDate(date, 'Asia/Taipei', 'yyyy-MM-dd');
+}
+function round2(n) { return Math.round((n || 0) * 100) / 100; }
+function round0(n) { return Math.round(n || 0); }
+function money(n) {
+  const v = round0(n);
+  const sign = v < 0 ? '-' : '';
+  const s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return 'NT$' + sign + s;
 }
 
 /**
@@ -854,4 +1076,132 @@ function getBonusDutyRecords(year, month) {
   }
 
   return records;
+}
+
+// ==================== 員工薪資設定 ====================
+
+/**
+ * 讀取「員工薪資設定」分頁，回傳 { 姓名: {role, monthlySalary, hourlyRate} }
+ * 時薪欄留空時，自動以 月薪 ÷ BASELINE_HOURS(160) 計算。
+ */
+function getSalarySettingsMap() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SALARY_SETTINGS);
+  const map = {};
+  if (!sheet) return map;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return map;
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  for (const row of data) {
+    const name = (row[0] || '').toString().trim();
+    if (!name) continue;
+
+    const role = (row[1] || '').toString().trim();
+    const monthlySalary = parseFloat(row[2]) || 0;
+    const manualHourly = parseFloat(row[3]);
+    const hourlyRate = (!isNaN(manualHourly) && manualHourly > 0)
+      ? manualHourly
+      : (monthlySalary / PAYROLL_CONFIG.BASELINE_HOURS);
+
+    map[name] = { role: role, monthlySalary: monthlySalary, hourlyRate: hourlyRate };
+  }
+  return map;
+}
+
+// ==================== 班表 ====================
+
+/**
+ * 讀取「班表」分頁中指定月份的資料，回傳 { 姓名: { 'yyyy-MM-dd': '班別字串' } }
+ */
+function getShiftRosterMap(year, month) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SHIFT_ROSTER);
+  const map = {};
+  if (!sheet) return map;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return map;
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+
+  for (const row of data) {
+    const name = (row[0] || '').toString().trim();
+    if (!name || !row[1]) continue;
+
+    const date = new Date(row[1]);
+    if (date < monthStart || date > monthEnd) continue;
+
+    const key = dateKeyOf(date);
+    const shift = (row[2] || '').toString().trim();
+    if (!map[name]) map[name] = {};
+    // 同一天多筆班別則合併（例如分兩列填 A 與 B,C）
+    map[name][key] = map[name][key] ? (map[name][key] + ',' + shift) : shift;
+  }
+  return map;
+}
+
+/**
+ * 處理班表圖片/PDF 辨識（透過 Gemini），寫入「班表」分頁
+ * @param {string} base64Image - 圖片或 PDF 的 Base64 編碼（含 data URL 前綴亦可）
+ * @returns {object} - 處理結果
+ */
+function processRosterImage(base64Image) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    createSheetIfNotExists(ss, SHEET_NAMES.SHIFT_ROSTER,
+      ['員工姓名', '日期', '班別(A/B/C，可多班如 A,B,C)', '備註']);
+
+    const prompt = `你是一個專門辨識診所「班表」的 AI 助手。請分析這張班表（可能是表格、手寫或 PDF），執行以下任務：
+
+1. 找出每位員工在每一天排了哪些班別。
+2. 班別只有三種：A（早班/早診）、B（中班/午診）、C（晚班/晚診）。
+3. 一位員工同一天可能上多個班，例如同時上 A、B、C 三班。
+
+請以純 JSON Array 格式回傳，不要包含任何其他文字或 markdown 標記：
+[
+  {"name": "王小明", "date": "2024-01-02", "shifts": "A,B,C"},
+  {"name": "李小華", "date": "2024-01-02", "shifts": "A"}
+]
+
+注意事項：
+- date 一律轉成 YYYY-MM-DD 格式。
+- shifts 用逗號分隔，只能包含 A、B、C。
+- 沒有排班的格子請略過，不要輸出。
+- 如果無法辨識任何有效班表，請回傳空陣列：[]`;
+
+    const result = callGeminiVisionAPI(base64Image, prompt);
+    if (!result.success) {
+      return { success: false, message: result.message };
+    }
+
+    const records = parseJSONResponse(result.data);
+    if (!records || records.length === 0) {
+      return { success: false, message: '無法從圖片中辨識出有效的班表資料' };
+    }
+
+    const sheet = ss.getSheetByName(SHEET_NAMES.SHIFT_ROSTER);
+    const rowsToAdd = [];
+    for (const rec of records) {
+      if (!rec.name || !rec.date) continue;
+      rowsToAdd.push([rec.name, rec.date, (rec.shifts || '').toString().toUpperCase(), '']);
+    }
+
+    if (rowsToAdd.length > 0) {
+      const lastRow = sheet.getLastRow();
+      sheet.getRange(lastRow + 1, 1, rowsToAdd.length, 4).setValues(rowsToAdd);
+    }
+
+    return {
+      success: true,
+      message: `成功辨識並寫入 ${rowsToAdd.length} 筆班表記錄`,
+      recordCount: rowsToAdd.length
+    };
+  } catch (error) {
+    Logger.log('processRosterImage Error: ' + error.toString());
+    return { success: false, message: '處理班表時發生錯誤: ' + error.toString() };
+  }
 }

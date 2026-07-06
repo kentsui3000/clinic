@@ -2,9 +2,13 @@
  * ============================================================
  * 徐嘉賢診所員工分紅自動化系統 - Apps Script
  * ============================================================
- * 版本：v1.5
+ * 版本：v1.6
  * 更新日期：2026-05-13
  * 變更紀錄：
+ *   v1.6 — 新增「氣喘/濕疹評估筆數」(Peak flow/ACT/POEM,每筆 $5,
+ *          計算方式鏡射自費流感:從門檻扣除+每筆獨立給價,進基礎分紅池)。
+ *          Form 1 新增一欄,「分紅明細」新增 J 欄「評估筆數」。
+ *          新增 migrateDailyFormAddAssessment() 給既有部署一鍵遷移。
  *   v1.5 — Form 2「病歷號」改成「可多筆」(逗號/換行/頓號分隔),
  *          腳本自動拆並產生多列分紅明細。「分紅明細」新增 I 欄「病歷號」
  *          追溯每筆分紅是哪位病人。分紅類別改集中設定 (BONUS_CATEGORIES),
@@ -31,7 +35,9 @@
  * 6. 從執行記錄複製兩張 Form 的「填寫網址」給員工
  *
  * 分紅規則(已對齊,不再修改):
- *   基礎分紅 = MAX(0, 看診人數 - 流感支數 - 60) * 5 + 流感支數 * 5
+ *   基礎分紅 = MAX(0, 看診人數 - 流感支數 - 評估筆數 - 60) * 5
+ *              + 流感支數 * 5 + 評估筆數 * 5
+ *   (評估 = Peak flow/ACT/POEM,一位病人一次門診算 1 筆,進基礎分紅池)
  *   值日生津貼 = 100 元 (僅上午/下午)
  *   代謝症候群收案 = 100 元/筆
  *   代謝症候群追蹤 = 20 元/筆
@@ -51,6 +57,7 @@ const SHEET_FORM_META  = 'Form回應_代謝';
 const THRESHOLD_VISITS = 60;   // 看診人數門檻
 const UNIT_PRICE       = 5;    // 超門檻每人單價
 const FLU_PRICE        = 5;    // 自費流感每支單價
+const ASSESS_PRICE     = 5;    // 氣喘/濕疹評估每筆單價 (Peak flow/ACT/POEM)
 const DUTY_BONUS       = 100;  // 值日生津貼
 const META_REGISTER    = 100;  // 代謝收案 (保留向下相容,實際金額讀 BONUS_CATEGORIES)
 const META_FOLLOWUP    = 20;   // 代謝追蹤 (保留向下相容)
@@ -215,6 +222,17 @@ function buildDailyForm_() {
       .setHelpText('沒有流感請填 0,不要留空')
       .setRequired(true);
   fluItem.setValidation(
+    FormApp.createTextValidation()
+      .setHelpText('請輸入大於或等於 0 的整數')
+      .requireNumberGreaterThanOrEqualTo(0)
+      .build()
+  );
+
+  const assessItem = form.addTextItem()
+      .setTitle('氣喘/濕疹評估筆數')
+      .setHelpText('Peak flow / ACT / POEM 執行人數。一位病人不管做幾項評估都算 1 筆。沒做請填 0')
+      .setRequired(true);
+  assessItem.setValidation(
     FormApp.createTextValidation()
       .setHelpText('請輸入大於或等於 0 的整數')
       .requireNumberGreaterThanOrEqualTo(0)
@@ -387,17 +405,23 @@ function onDailyFormSubmit(e) {
     const employees = String(r['本班當值人員'][0]).split(', ').map(s => s.trim()).filter(s => s);
     const visits   = parseFloat(r['當時段有效看診人數'][0]) || 0;
     const flu      = parseFloat(r['自費流感疫苗支數'][0]) || 0;
+    // v1.6:氣喘/濕疹評估 (Peak flow/ACT/POEM)。舊 Form 沒有此欄位時視為 0。
+    const assess   = (r['氣喘/濕疹評估筆數'] && r['氣喘/濕疹評估筆數'][0])
+                   ? (parseFloat(r['氣喘/濕疹評估筆數'][0]) || 0) : 0;
     const duty     = (r['本時段值日生'] && r['本時段值日生'][0]) ? r['本時段值日生'][0].trim() : '';
 
-    // 方案 Y:流感患者從總人數扣掉再算超門檻獎金
-    const baseBonus = Math.max(0, visits - flu - THRESHOLD_VISITS) * UNIT_PRICE + flu * FLU_PRICE;
+    // 方案 Y:非門檻類 (流感+評估) 從總人數扣掉再算超門檻獎金,
+    // 非門檻類每筆固定給價,不受 60 人門檻限制
+    const baseBonus = Math.max(0, visits - flu - assess - THRESHOLD_VISITS) * UNIT_PRICE
+                    + flu * FLU_PRICE
+                    + assess * ASSESS_PRICE;
 
     const detail = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DETAIL);
     if (!detail) {
       Logger.log('錯誤:找不到「' + SHEET_DETAIL + '」工作表');
       return;
     }
-    ensureChartNoColumn_(detail);
+    ensureDetailHeaders_(detail);
 
     const now = new Date();
     const rows = [];
@@ -405,20 +429,22 @@ function onDailyFormSubmit(e) {
     // 1. 每位當班員工的基礎分紅(僅當金額 > 0 時寫入,避免 0 元的空紀錄)
     if (baseBonus > 0) {
       employees.forEach(emp => {
-        rows.push([now, date, period, emp, '基礎分紅', baseBonus, visits, flu, '']);
+        rows.push([now, date, period, emp, '基礎分紅', baseBonus, visits, flu, '', assess]);
       });
     }
 
     // 2. 值日生津貼(僅上午/下午、且不是「無」)
     if (duty && duty !== '無' && (period === '上午' || period === '下午')) {
-      rows.push([now, date, period, duty, '值日生津貼', DUTY_BONUS, '', '', '']);
+      rows.push([now, date, period, duty, '值日生津貼', DUTY_BONUS, '', '', '', '']);
     }
 
     if (rows.length > 0) {
-      detail.getRange(detail.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+      detail.getRange(detail.getLastRow() + 1, 1, rows.length, 10).setValues(rows);
     }
 
-    Logger.log('當班結帳處理完成:' + date + ' ' + period + ',基礎' + baseBonus + '元/人 × ' + employees.length + '人' + (duty && duty !== '無' ? ',值日生' + duty : ''));
+    Logger.log('當班結帳處理完成:' + date + ' ' + period + ',基礎' + baseBonus + '元/人 × ' + employees.length + '人' +
+               '(看診' + visits + '/流感' + flu + '/評估' + assess + ')' +
+               (duty && duty !== '無' ? ',值日生' + duty : ''));
   } catch (err) {
     Logger.log('onDailyFormSubmit 錯誤:' + err.message + '\n' + err.stack);
   }
@@ -470,17 +496,17 @@ function onMetaFormSubmit(e) {
       return;
     }
 
-    // 確保第 9 欄「病歷號」標題存在 (v1.5 schema)
-    ensureChartNoColumn_(detail);
+    // 確保 I 欄「病歷號」、J 欄「評估筆數」標題存在 (v1.6 schema)
+    ensureDetailHeaders_(detail);
 
     const now = new Date();
     const rows = [];
     for (let i = 0; i < count; i++) {
       const chartNo = chartNos[i] || '';
       rows.push([now, date, period, emp, category.label, category.amount,
-                 '', '', chartNo]);
+                 '', '', chartNo, '']);
     }
-    detail.getRange(detail.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+    detail.getRange(detail.getLastRow() + 1, 1, rows.length, 10).setValues(rows);
 
     const total = category.amount * count;
     Logger.log('代謝症候群處理完成:' + date + ' ' + emp + ' ' + category.label +
@@ -491,15 +517,12 @@ function onMetaFormSubmit(e) {
   }
 }
 
-function ensureChartNoColumn_(detail) {
-  const lastCol = detail.getLastColumn();
-  if (lastCol < 9) {
+function ensureDetailHeaders_(detail) {
+  if (detail.getRange(1, 9).getValue() !== '病歷號') {
     detail.getRange(1, 9).setValue('病歷號');
-  } else {
-    const header = detail.getRange(1, 9).getValue();
-    if (header !== '病歷號') {
-      detail.getRange(1, 9).setValue('病歷號');
-    }
+  }
+  if (detail.getRange(1, 10).getValue() !== '評估筆數') {
+    detail.getRange(1, 10).setValue('評估筆數');
   }
 }
 
@@ -510,20 +533,76 @@ function ensureChartNoColumn_(detail) {
 
 function testCalculation() {
   const cases = [
-    { visits: 50, flu: 0,  expected: 0   },
-    { visits: 50, flu: 10, expected: 50  },
-    { visits: 61, flu: 0,  expected: 5   },
-    { visits: 80, flu: 0,  expected: 100 },
-    { visits: 80, flu: 10, expected: 100 },
-    { visits: 100, flu: 20, expected: 200 }
+    { visits: 50,  flu: 0,  assess: 0, expected: 0   },
+    { visits: 50,  flu: 10, assess: 0, expected: 50  },
+    { visits: 61,  flu: 0,  assess: 0, expected: 5   },
+    { visits: 80,  flu: 0,  assess: 0, expected: 100 },
+    { visits: 80,  flu: 10, assess: 0, expected: 100 },
+    { visits: 100, flu: 20, assess: 0, expected: 200 },
+    // v1.6:氣喘/濕疹評估 (行為鏡射流感)
+    { visits: 50,  flu: 0,  assess: 3, expected: 15  },  // 未達門檻,3 筆評估仍給 $15
+    { visits: 80,  flu: 10, assess: 3, expected: 100 },  // 過門檻,評估扣門檻+自身給價剛好抵消
+    { visits: 60,  flu: 0,  assess: 5, expected: 25  },  // 卡門檻,5 筆評估帶來 $25
+    { visits: 80,  flu: 5,  assess: 5, expected: 100 }   // 流感+評估混合
   ];
 
   Logger.log('=== 基礎分紅計算驗證 ===');
   cases.forEach(c => {
-    const bonus = Math.max(0, c.visits - c.flu - THRESHOLD_VISITS) * UNIT_PRICE + c.flu * FLU_PRICE;
+    const bonus = Math.max(0, c.visits - c.flu - c.assess - THRESHOLD_VISITS) * UNIT_PRICE
+                + c.flu * FLU_PRICE
+                + c.assess * ASSESS_PRICE;
     const result = bonus === c.expected ? '✓' : '✗';
-    Logger.log(result + ' 看診' + c.visits + '人/流感' + c.flu + '支 → ' + bonus + '元(預期 ' + c.expected + '元)');
+    Logger.log(result + ' 看診' + c.visits + '/流感' + c.flu + '/評估' + c.assess +
+               ' → ' + bonus + '元(預期 ' + c.expected + '元)');
   });
+}
+
+
+// ============================================================
+// 輔助函數:遷移既有 Form 1 新增「氣喘/濕疹評估筆數」欄位(v1.6)
+// 用法:在 Apps Script 編輯器手動執行一次即可
+// ============================================================
+
+function migrateDailyFormAddAssessment() {
+  const ids = getFormIds_();
+  if (!ids.daily) {
+    Logger.log('錯誤:找不到 Form 1 ID,請先執行 createBothForms()');
+    return;
+  }
+
+  const form = FormApp.openById(ids.daily);
+  const items = form.getItems();
+
+  // 已存在就跳過(可重複執行)
+  const exists = items.some(item => item.getTitle().trim() === '氣喘/濕疹評估筆數');
+  if (exists) {
+    Logger.log('「氣喘/濕疹評估筆數」欄位已存在,跳過。');
+    return;
+  }
+
+  // 新增欄位(先加在最後)
+  const assessItem = form.addTextItem()
+      .setTitle('氣喘/濕疹評估筆數')
+      .setHelpText('Peak flow / ACT / POEM 執行人數。一位病人不管做幾項評估都算 1 筆。沒做請填 0')
+      .setRequired(true);
+  assessItem.setValidation(
+    FormApp.createTextValidation()
+      .setHelpText('請輸入大於或等於 0 的整數')
+      .requireNumberGreaterThanOrEqualTo(0)
+      .build()
+  );
+
+  // 移到「自費流感疫苗支數」正下方
+  const fluIndex = form.getItems().findIndex(item => item.getTitle().trim() === '自費流感疫苗支數');
+  if (fluIndex !== -1) {
+    form.moveItem(assessItem.getIndex(), fluIndex + 1);
+    Logger.log('✓ 已新增「氣喘/濕疹評估筆數」並移到「自費流感疫苗支數」下方');
+  } else {
+    Logger.log('✓ 已新增「氣喘/濕疹評估筆數」(找不到流感欄位,保持在表單最後)');
+  }
+
+  Logger.log('遷移完成。請開 Form 1 預覽確認欄位位置與說明文字。');
+  Logger.log('注意:「Form回應_當班」分頁會自動在最右邊新增一欄收此值,不需手動處理。');
 }
 
 

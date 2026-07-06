@@ -111,6 +111,7 @@ def build_pricing_sheet(wb):
         ["代謝症候群-收案", 100,  "每筆 100 元"],
         ["代謝症候群-追蹤",  20,  "每筆 20 元"],
         ["值日生津貼",     100,  "每時段 100 元"],
+        ["氣喘/濕疹評估單價", 5,  "Peak flow/ACT/POEM 每筆 5 元，一位病人一次門診算 1 筆"],
         ["值日生人數門檻",   0,  "（目前未使用，預留）"],
     ]
     for row in rows:
@@ -141,12 +142,13 @@ def build_form_daily_sheet(wb):
     ws = wb.create_sheet("Form回應_當班")
     headers = [
         "時間戳記", "日期", "門診時段", "本時段值日生", "本班當值人員",
-        "填寫人", "核對人", "當時段有效看診人數", "自費流感疫苗支數", "備註",
+        "填寫人", "核對人", "當時段有效看診人數", "自費流感疫苗支數",
+        "氣喘/濕疹評估筆數", "備註",
     ]
     ws.append(headers)
     style_header_row(ws, 1, len(headers))
 
-    set_col_widths(ws, [18, 12, 10, 14, 30, 12, 12, 18, 16, 24])
+    set_col_widths(ws, [18, 12, 10, 14, 30, 12, 12, 18, 16, 18, 24])
     ws.freeze_panes = "A2"
 
     add_note(ws, "A1",
@@ -180,12 +182,12 @@ def build_detail_sheet(wb):
     ws = wb.create_sheet("分紅明細")
     headers = [
         "寫入時間", "日期", "時段", "員工", "分紅類型",
-        "金額", "看診人數", "流感支數", "病歷號",
+        "金額", "看診人數", "流感支數", "病歷號", "評估筆數",
     ]
     ws.append(headers)
     style_header_row(ws, 1, len(headers))
 
-    set_col_widths(ws, [18, 12, 10, 12, 14, 10, 12, 12, 14])
+    set_col_widths(ws, [18, 12, 10, 12, 14, 10, 12, 12, 14, 12])
     ws.freeze_panes = "A2"
 
     add_note(ws, "A1",
@@ -287,12 +289,12 @@ def build_summary_sheet(wb):
     ws["L1"].font = TITLE_FONT
     ws.merge_cells("L1:O1")
     ws["L2"] = (
-        '=QUERY(\'Form回應_當班\'!A:J,'
-        '"SELECT B, C, H, I'
+        '=QUERY(\'Form回應_當班\'!A:K,'
+        '"SELECT B, C, H, I, J'
         " WHERE B >= date '\"&TEXT(EOMONTH(TODAY(),-1)+1,\"yyyy-MM-dd\")&\"'"
         " AND B <= date '\"&TEXT(EOMONTH(TODAY(),0),\"yyyy-MM-dd\")&\"'"
         ' ORDER BY B, C'
-        ' LABEL B ' + "'日期', C '時段', H '看診人數', I '流感支數'" + '", 1)'
+        ' LABEL B ' + "'日期', C '時段', H '看診人數', I '流感支數', J '評估筆數'" + '", 1)'
     )
 
     ws.freeze_panes = "A3"
@@ -353,7 +355,8 @@ def build_cover_sheet(wb):
             "員工只接觸 Form 連結，不接觸 Sheets。",
         ]),
         ("五、分紅規則摘要", [
-            "基礎分紅 = MAX(0, 看診 - 流感 - 60) × 5 + 流感 × 5（每位當班員工平均分）。",
+            "基礎分紅 = MAX(0, 看診 - 流感 - 評估 - 60) × 5 + 流感 × 5 + 評估 × 5。",
+            "（評估 = Peak flow/ACT/POEM，一位病人一次算 1 筆；每位當班員工平均分）",
             "值日生津貼 = 100 元（僅上午/下午、值日生一人）。",
             "代謝症候群：收案 100 元/筆、追蹤 20 元/筆，給該筆執行人員。",
             "詳見 README.md 與 apps_script.gs。",

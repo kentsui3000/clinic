@@ -1,0 +1,480 @@
+<title>結帳表單 v1.8 Mockup — 徐嘉賢診所</title>
+<style>
+  :root{
+    --navy:#002840; --navy-700:#013a5c; --navy-300:#3a5168; --on-navy:#eaf1f7;
+    --amber:#FFB640; --amber-600:#E69A00; --amber-100:#fff4d6;
+    --slate:#47607A;
+    --ok:#2E7D32; --ok-bg:#e7f2e8; --bad:#C62828; --bad-bg:#fdecea;
+    --bg:#f2f5f7; --surface:#ffffff; --line:#d8e0e6;
+    --text:#1a2733; --muted:#47607A;
+    --note-bg:#f7f9fa; --note-border:#c3ceD6;
+    --radius:10px; --tap:48px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0b1620; --surface:#122230; --line:#25405a;
+      --text:#e8eef4; --muted:#9db2c4;
+      --note-bg:#0f1c28; --note-border:#2c4a66;
+      --amber-100:#3a2f14; --ok-bg:#12290f; --bad-bg:#33120f;
+      --navy-300:#7a92a8; --on-navy:#eaf1f7;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1620; --surface:#122230; --line:#25405a;
+    --text:#e8eef4; --muted:#9db2c4;
+    --note-bg:#0f1c28; --note-border:#2c4a66;
+    --amber-100:#3a2f14; --ok-bg:#12290f; --bad-bg:#33120f;
+    --navy-300:#7a92a8; --on-navy:#eaf1f7;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f5f7; --surface:#ffffff; --line:#d8e0e6;
+    --text:#1a2733; --muted:#47607A;
+    --note-bg:#f7f9fa; --note-border:#c3ceD6;
+    --amber-100:#fff4d6; --ok-bg:#e7f2e8; --bad-bg:#fdecea;
+    --navy-300:#3a5168; --on-navy:#eaf1f7;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+    font-size:16px; line-height:1.65;
+  }
+  .topbar{
+    background:var(--navy); color:var(--on-navy);
+    padding:14px 20px; position:sticky; top:0; z-index:20;
+    display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  }
+  .topbar .brand{font-weight:700; font-size:15px; letter-spacing:.06em}
+  .topbar .doc{font-size:13px; color:#b8c9d8}
+  .topbar .ver{
+    background:var(--amber); color:var(--navy); font-weight:700;
+    font-size:12px; padding:1px 10px; border-radius:99px; letter-spacing:.05em;
+    margin-left:auto;
+  }
+  .wrap{max-width:480px; margin:0 auto; padding:20px 14px 64px}
+
+  .purpose{
+    background:var(--note-bg); border:1px dashed var(--note-border);
+    border-radius:var(--radius); padding:14px 16px; font-size:13.5px;
+    color:var(--muted); margin-bottom:22px;
+  }
+  .purpose b{color:var(--text)}
+  .purpose ul{margin:6px 0 0; padding-left:18px}
+  .purpose li{margin:2px 0}
+
+  .card{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:18px 16px 20px; margin-bottom:14px;
+  }
+  .card h2{
+    margin:0 0 4px; font-size:15px; color:var(--navy-300);
+    letter-spacing:.08em; font-weight:700;
+  }
+  :root[data-theme="dark"] .card h2, .dark-h2{color:var(--navy-300)}
+  .card .sub{font-size:12.5px; color:var(--muted); margin:0 0 14px}
+
+  .field{margin-bottom:16px}
+  .field:last-child{margin-bottom:0}
+  label.flabel{
+    display:block; font-weight:700; font-size:14.5px; margin-bottom:5px;
+  }
+  .opt{font-weight:400; color:var(--muted); font-size:12.5px}
+  .help{font-size:12.5px; color:var(--muted); margin-top:4px; line-height:1.5}
+
+  input[type=text],input[type=date],select,textarea{
+    width:100%; min-height:var(--tap); padding:10px 12px;
+    border:1.5px solid var(--line); border-radius:8px;
+    font:inherit; background:var(--surface); color:var(--text);
+  }
+  input:focus,select:focus,textarea:focus,button:focus-visible{
+    outline:2.5px solid var(--amber-600); outline-offset:1px;
+  }
+  input.err{border-color:var(--bad)}
+  .errmsg{
+    display:none; margin-top:5px; font-size:13px; color:var(--bad);
+    background:var(--bad-bg); border-radius:6px; padding:6px 10px;
+  }
+  .errmsg.show{display:block}
+
+  .seg{display:flex; gap:8px}
+  .seg .segbtn{
+    flex:1; min-height:var(--tap); border:1.5px solid var(--line);
+    border-radius:8px; background:var(--surface); color:var(--text);
+    font:inherit; font-weight:600; cursor:pointer;
+  }
+  .seg .segbtn[aria-pressed="true"]{
+    background:var(--navy); color:var(--on-navy); border-color:var(--navy);
+  }
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px}
+  .chip{
+    min-height:var(--tap); padding:0 18px; border-radius:99px;
+    border:1.5px solid var(--line); background:var(--surface); color:var(--text);
+    font:inherit; font-weight:600; cursor:pointer;
+  }
+  .chip[aria-pressed="true"]{
+    background:var(--navy); color:var(--on-navy); border-color:var(--navy);
+  }
+  .count{
+    font-size:13px; color:var(--muted); margin-top:6px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .newbadge{
+    display:inline-block; background:var(--amber); color:var(--navy);
+    font-size:11px; font-weight:700; padding:1px 8px; border-radius:99px;
+    letter-spacing:.06em; vertical-align:2px; margin-left:6px;
+  }
+
+  .reveal{display:none; margin-top:14px; border-top:1px solid var(--line); padding-top:14px}
+  .reveal.open{display:block}
+  .actblock{border:1px solid var(--line); border-radius:8px; padding:14px 12px; margin-bottom:12px}
+  .actblock h3{margin:0 0 10px; font-size:13.5px; color:var(--muted); font-weight:700; letter-spacing:.05em}
+
+  .chipcount{
+    display:none; margin-top:5px; font-size:13px; color:var(--ok);
+    background:var(--ok-bg); border-radius:6px; padding:4px 10px;
+    font-variant-numeric:tabular-nums;
+  }
+  .chipcount.show{display:inline-block}
+
+  .submitbar{margin-top:4px}
+  .btn-primary{
+    width:100%; min-height:52px; border:0; border-radius:8px;
+    background:var(--navy); color:var(--on-navy);
+    font:inherit; font-size:17px; font-weight:700; cursor:pointer;
+  }
+  .btn-primary:disabled{opacity:.65; cursor:default}
+  .guard{
+    margin-top:10px; font-size:12.5px; color:var(--muted);
+    background:var(--amber-100); border-radius:6px; padding:8px 12px;
+  }
+  .guard b{color:var(--text)}
+
+  .note{
+    border:1px dashed var(--note-border); background:var(--note-bg);
+    border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--muted);
+    margin-top:14px; line-height:1.55;
+  }
+  .note .n{
+    display:inline-block; background:var(--slate); color:#fff; font-size:11px;
+    width:18px; height:18px; line-height:18px; text-align:center;
+    border-radius:99px; margin-right:6px; font-variant-numeric:tabular-nums;
+  }
+  .note b{color:var(--text)}
+
+  .toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(90px);
+    background:var(--navy); color:var(--on-navy); font-size:14.5px;
+    padding:11px 22px; border-radius:99px; box-shadow:0 6px 24px rgba(0,20,40,.28);
+    transition:transform .25s ease; z-index:30; max-width:90vw;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+
+  .footer{
+    text-align:center; font-size:12px; color:var(--muted); margin-top:28px;
+  }
+</style>
+
+<div class="topbar">
+  <span class="brand">徐嘉賢診所</span>
+  <span class="doc">每日當班結帳 — 合併版 mockup</span>
+  <span class="ver">v1.8 提案</span>
+</div>
+
+<div class="wrap">
+
+  <div class="purpose">
+    <b>這份 mockup 給你審什麼:</b>欄位、順序、預設值、說明文字、分段邏輯 —
+    這些會 1:1 落地到 Google Form。
+    <ul>
+      <li>色彩/圓角/chips 樣式<b>不會</b>落地(Google Form 外觀由 Google 決定)</li>
+      <li>虛線框是設計註記,正式表單不會出現</li>
+      <li>可以實際點按操作,體驗「有/無代謝活動」的展開邏輯</li>
+    </ul>
+  </div>
+
+  <!-- 群組 1 -->
+  <div class="card">
+    <h2>1 · 本班資訊</h2>
+    <p class="sub">4 個欄位,全部點選,不用打字</p>
+
+    <div class="field">
+      <label class="flabel" for="f-date">日期</label>
+      <input type="date" id="f-date">
+      <div class="help">開啟即帶今天,只有補登昨天的班才需要改</div>
+    </div>
+
+    <div class="field">
+      <label class="flabel">門診時段</label>
+      <div class="seg" role="group" aria-label="門診時段">
+        <button class="segbtn" aria-pressed="false" data-seg="period">上午</button>
+        <button class="segbtn" aria-pressed="false" data-seg="period">下午</button>
+        <button class="segbtn" aria-pressed="false" data-seg="period">晚上</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="flabel">本班當值人員</label>
+      <div class="chips" role="group" aria-label="本班當值人員">
+        <button class="chip" aria-pressed="false">芯儀</button>
+        <button class="chip" aria-pressed="false">郁芹</button>
+        <button class="chip" aria-pressed="false">佩芷</button>
+        <button class="chip" aria-pressed="false">嘉惠</button>
+        <button class="chip" aria-pressed="false">珈宜</button>
+        <button class="chip" aria-pressed="false">雅玲</button>
+      </div>
+      <div class="count" id="staff-count">已勾 0 人 — 含值日生本人</div>
+    </div>
+
+    <div class="field">
+      <label class="flabel" for="f-duty">本時段值日生</label>
+      <select id="f-duty">
+        <option>無</option><option>芯儀</option><option>郁芹</option>
+        <option>佩芷</option><option>嘉惠</option><option>珈宜</option><option>雅玲</option>
+      </select>
+      <div class="help">晚上時段請選「無」</div>
+    </div>
+
+    <div class="note">
+      <span class="n">1</span>名單全部由「員工總表」自動同步,零打字零錯字。
+      觸控目標 ≥48px,櫃台手機直接點。
+    </div>
+  </div>
+
+  <!-- 群組 2 -->
+  <div class="card">
+    <h2>2 · 結帳數字</h2>
+    <p class="sub">只填 3 個數字 — 這是你唯一要「打字」的地方</p>
+
+    <div class="field">
+      <label class="flabel" for="f-visits">當時段有效看診人數</label>
+      <input type="text" inputmode="numeric" id="f-visits" placeholder="本時段所有醫師合計">
+    </div>
+
+    <div class="field">
+      <label class="flabel" for="f-flu">自費流感疫苗支數</label>
+      <input type="text" inputmode="numeric" id="f-flu" value="0">
+      <div class="help">沒有就保留 0,不要清空</div>
+    </div>
+
+    <div class="field">
+      <label class="flabel" for="f-assess">氣喘/濕疹評估筆數</label>
+      <input type="text" inputmode="numeric" id="f-assess" value="0">
+      <div class="errmsg" id="assess-err">評估筆數不能留空:沒做請填 0</div>
+      <div class="help">Peak flow / ACT / POEM 執行人數,一位病人算 1 筆</div>
+    </div>
+
+    <div class="note">
+      <span class="n">2</span>數字欄叫出數字鍵盤(inputmode)。清空「評估筆數」再點別處,
+      可以看到欄位級錯誤示範 — 訊息講明怎麼修,不清掉輸入。
+    </div>
+  </div>
+
+  <!-- 群組 3:代謝 -->
+  <div class="card">
+    <h2>3 · 代謝症候群活動 <span class="newbadge">v1.8 新增</span></h2>
+    <p class="sub">取代原本獨立的 Form 2,結帳時一起登錄</p>
+
+    <div class="field">
+      <label class="flabel">本時段有無代謝症候群活動?</label>
+      <div class="seg" role="group" aria-label="有無代謝活動">
+        <button class="segbtn" aria-pressed="true" data-seg="meta" data-meta="no">無</button>
+        <button class="segbtn" aria-pressed="false" data-seg="meta" data-meta="yes">有,展開登錄</button>
+      </div>
+      <div class="help">平常日選「無」直接送出,表單長度跟以前一樣</div>
+    </div>
+
+    <div class="reveal" id="meta-section">
+      <div class="actblock">
+        <h3>代謝活動 1</h3>
+        <div class="field">
+          <label class="flabel" for="m1-type">活動類型</label>
+          <select id="m1-type" class="mtype">
+            <option>無</option>
+            <option>收案 (P7501)</option>
+            <option>追蹤 (P7502)</option>
+            <option>年度評估 (P7503)</option>
+          </select>
+          <div class="help">照健保申報代碼選,申報哪個碼就選哪個</div>
+        </div>
+        <div class="field">
+          <label class="flabel" for="m1-emp">執行人員</label>
+          <select id="m1-emp">
+            <option>請選擇</option><option>芯儀</option><option>郁芹</option>
+            <option>佩芷</option><option>嘉惠</option><option>珈宜</option><option>雅玲</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel" for="m1-charts">病歷號 <span class="opt">(多筆用逗號分隔)</span></label>
+          <input type="text" id="m1-charts" placeholder="例:0031234, 0035678">
+          <div class="chipcount" id="m1-count"></div>
+          <div class="help">每筆病歷號獨立計算,同類型同一人可一次填多筆</div>
+        </div>
+      </div>
+
+      <div class="actblock" id="act2" style="display:none">
+        <h3>代謝活動 2 — 給同時段第二位執行者或第二種類型</h3>
+        <div class="field">
+          <label class="flabel" for="m2-type">活動類型</label>
+          <select id="m2-type">
+            <option>無</option>
+            <option>收案 (P7501)</option>
+            <option>追蹤 (P7502)</option>
+            <option>年度評估 (P7503)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel" for="m2-emp">執行人員</label>
+          <select id="m2-emp">
+            <option>請選擇</option><option>芯儀</option><option>郁芹</option>
+            <option>佩芷</option><option>嘉惠</option><option>珈宜</option><option>雅玲</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel" for="m2-charts">病歷號 <span class="opt">(多筆用逗號分隔)</span></label>
+          <input type="text" id="m2-charts">
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="n">3</span>漸進揭露兩層:選「有」才展開活動 1;
+        活動 1 類型選定後才出現活動 2。沒用到的格子永遠不佔畫面。<br>
+        <span class="n">4</span>病歷號即時回饋筆數(試打 <b>0031234, 0035678</b>),
+        但<b>不顯示金額</b> — 員工不可見彙總是系統核心原則。<br>
+        <span class="n">5</span>超過 2 組(罕見):找主任用備用通道補登,
+        <b>絕對不要再送一次結帳表單</b> — 會重複發整班基礎分紅。
+      </div>
+    </div>
+  </div>
+
+  <!-- 群組 4 -->
+  <div class="card">
+    <h2>4 · 簽核送出</h2>
+    <p class="sub">最後才簽名 — 順序跟著工作走,不是跟著資料庫走</p>
+
+    <div class="field">
+      <label class="flabel" for="f-filler">填寫人</label>
+      <select id="f-filler">
+        <option>請選擇</option><option>芯儀</option><option>郁芹</option>
+        <option>佩芷</option><option>嘉惠</option><option>珈宜</option><option>雅玲</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label class="flabel" for="f-checker">核對人</label>
+      <select id="f-checker">
+        <option>請選擇</option><option>芯儀</option><option>郁芹</option>
+        <option>佩芷</option><option>嘉惠</option><option>珈宜</option><option>雅玲</option>
+      </select>
+      <div class="help">主任或徐醫師,可後補</div>
+    </div>
+
+    <div class="field">
+      <label class="flabel" for="f-memo">備註 <span class="opt">(選填)</span></label>
+      <textarea id="f-memo" rows="2"></textarea>
+    </div>
+
+    <div class="submitbar">
+      <button class="btn-primary" id="submit-btn">送出結帳</button>
+      <div class="guard">
+        <b>一個時段只送一張。</b>送出後發現填錯,不要重送 —
+        通知主任修正,重送會重複計算全班分紅。
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="n">6</span>填寫人/核對人移到最後(結帳流程的自然收尾),
+      欄位「名稱」與現行完全相同,後端 Apps Script 一行都不用改判斷。<br>
+      <span class="n">7</span>送出即鎖定按鈕 →「送出中…」→ 確認頁,
+      雙擊不會產生兩張(Google Form 原生行為 + 教育訓練雙保險)。
+    </div>
+  </div>
+
+  <div class="footer">
+    v1.8 提案 mockup · 審完回覆「OK 動工」即進入 Apps Script 實作 ·
+    正式版由 buildDailyForm_() 產生
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var $=function(s){return document.querySelector(s)};
+  var $$=function(s){return Array.prototype.slice.call(document.querySelectorAll(s))};
+
+  // 日期預設今天
+  var d=new Date(), p=function(n){return (n<10?'0':'')+n};
+  $('#f-date').value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+
+  // 時段 segmented(單選)
+  $$('[data-seg="period"]').forEach(function(b){
+    b.addEventListener('click',function(){
+      $$('[data-seg="period"]').forEach(function(x){x.setAttribute('aria-pressed','false')});
+      b.setAttribute('aria-pressed','true');
+    });
+  });
+
+  // 當值人員 chips + 計數
+  $$('.chip').forEach(function(c){
+    c.addEventListener('click',function(){
+      c.setAttribute('aria-pressed', c.getAttribute('aria-pressed')==='true'?'false':'true');
+      var n=$$('.chip[aria-pressed="true"]').length;
+      $('#staff-count').textContent='已勾 '+n+' 人 — 含值日生本人';
+    });
+  });
+
+  // 代謝 routing
+  $$('[data-seg="meta"]').forEach(function(b){
+    b.addEventListener('click',function(){
+      $$('[data-seg="meta"]').forEach(function(x){x.setAttribute('aria-pressed','false')});
+      b.setAttribute('aria-pressed','true');
+      $('#meta-section').classList.toggle('open', b.getAttribute('data-meta')==='yes');
+    });
+  });
+
+  // 活動1 類型選定 → 顯示活動2
+  $('#m1-type').addEventListener('change',function(){
+    $('#act2').style.display = this.value!=='無' ? 'block' : 'none';
+  });
+
+  // 病歷號即時筆數(不顯示金額)
+  $('#m1-charts').addEventListener('input',function(){
+    var n=this.value.split(/[,，、\n]/).map(function(s){return s.trim()})
+          .filter(function(s){return s!==''}).length;
+    var el=$('#m1-count');
+    if(n>0){ el.textContent='✓ 共 '+n+' 筆病歷號,每筆獨立計算'; el.classList.add('show'); }
+    else el.classList.remove('show');
+  });
+
+  // 評估筆數 blur 驗證示範
+  var assess=$('#f-assess');
+  assess.addEventListener('blur',function(){
+    var bad = assess.value.trim()==='';
+    assess.classList.toggle('err',bad);
+    $('#assess-err').classList.toggle('show',bad);
+  });
+  assess.addEventListener('input',function(){
+    if(assess.value.trim()!==''){
+      assess.classList.remove('err'); $('#assess-err').classList.remove('show');
+    }
+  });
+
+  // 送出:鎖定 → toast
+  var btn=$('#submit-btn'), toast=$('#toast');
+  btn.addEventListener('click',function(){
+    btn.disabled=true; btn.textContent='送出中…';
+    setTimeout(function(){
+      toast.textContent='Mockup 示範 — 正式版由 Google Form 處理送出';
+      toast.classList.add('show');
+      setTimeout(function(){
+        toast.classList.remove('show');
+        btn.disabled=false; btn.textContent='送出結帳';
+      },2600);
+    },500);
+  });
+})();
+</script>

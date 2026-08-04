@@ -2,9 +2,13 @@
  * ============================================================
  * 徐嘉賢診所員工分紅自動化系統 - Apps Script
  * ============================================================
- * 版本：v1.6
+ * 版本：v1.7
  * 更新日期：2026-05-13
  * 變更紀錄：
+ *   v1.7 — Form 2「活動類型」對齊健保代謝症候群防治計畫代碼:
+ *          收案 (P7501) $100 / 追蹤 (P7502) $20 / 年度評估 (P7503) $20。
+ *          新增「年度評估」分紅類別。
+ *          新增 migrateMetaFormUpdateActivityTypes() 給既有部署一鍵遷移。
  *   v1.6 — 新增「氣喘/濕疹評估筆數」(Peak flow/ACT/POEM,每筆 $5,
  *          計算方式鏡射自費流感:從門檻扣除+每筆獨立給價,進基礎分紅池)。
  *          Form 1 新增一欄,「分紅明細」新增 J 欄「評估筆數」。
@@ -39,8 +43,9 @@
  *              + 流感支數 * 5 + 評估筆數 * 5
  *   (評估 = Peak flow/ACT/POEM,一位病人一次門診算 1 筆,進基礎分紅池)
  *   值日生津貼 = 100 元 (僅上午/下午)
- *   代謝症候群收案 = 100 元/筆
- *   代謝症候群追蹤 = 20 元/筆
+ *   代謝症候群收案 (P7501) = 100 元/筆
+ *   代謝症候群追蹤 (P7502) = 20 元/筆
+ *   代謝症候群年度評估 (P7503) = 20 元/筆
  * ============================================================
  */
 
@@ -77,12 +82,17 @@ const META_FOLLOWUP    = 20;   // 代謝追蹤 (保留向下相容)
  *                false: 不論病歷號幾筆,只記 1 列 (用於非依病人計算的津貼)
  */
 const BONUS_CATEGORIES = {
-  '收案': { label: '代謝-收案', amount: 100, perPatient: true },
-  '追蹤': { label: '代謝-追蹤', amount: 20,  perPatient: true }
+  // 匹配規則:「活動類型選項字串包含 key」即符合。key 之間不可互為子字串。
+  '收案':     { label: '代謝-收案',     amount: 100, perPatient: true },  // P7501
+  '追蹤':     { label: '代謝-追蹤',     amount: 20,  perPatient: true },  // P7502
+  '年度評估': { label: '代謝-年度評估', amount: 20,  perPatient: true }   // P7503
   // 範例(將來新增):
   // '衛教推廣': { label: '衛教推廣', amount: 50, perPatient: false },
   // 'SLIT 服務': { label: 'SLIT-服務', amount: 30, perPatient: true },
 };
+
+// Form 2「活動類型」下拉選項(對齊健保申報代碼,員工照代碼對號入座)
+const META_ACTIVITY_CHOICES = ['收案 (P7501)', '追蹤 (P7502)', '年度評估 (P7503)'];
 
 // Form ID 從 ScriptProperties 動態讀取(由 createBothForms 自動寫入)
 function getFormIds_() {
@@ -269,7 +279,7 @@ function buildMetaForm_() {
 
   form.addMultipleChoiceItem()
       .setTitle('活動類型')
-      .setChoiceValues(['收案', '追蹤'])
+      .setChoiceValues(META_ACTIVITY_CHOICES)
       .setRequired(true);
 
   form.addListItem()
@@ -603,6 +613,41 @@ function migrateDailyFormAddAssessment() {
 
   Logger.log('遷移完成。請開 Form 1 預覽確認欄位位置與說明文字。');
   Logger.log('注意:「Form回應_當班」分頁會自動在最右邊新增一欄收此值,不需手動處理。');
+}
+
+
+// ============================================================
+// 輔助函數:遷移既有 Form 2 活動類型選項為健保代碼版(v1.7)
+// 用法:在 Apps Script 編輯器手動執行一次即可
+// ============================================================
+
+function migrateMetaFormUpdateActivityTypes() {
+  const ids = getFormIds_();
+  if (!ids.meta) {
+    Logger.log('錯誤:找不到 Form 2 ID,請先執行 createBothForms()');
+    return;
+  }
+
+  const form = FormApp.openById(ids.meta);
+  const item = form.getItems().find(i => i.getTitle().trim() === '活動類型');
+  if (!item) {
+    Logger.log('錯誤:Form 2 找不到「活動類型」欄位');
+    return;
+  }
+
+  const mc = item.asMultipleChoiceItem();
+  const current = mc.getChoices().map(c => c.getValue());
+  const same = current.length === META_ACTIVITY_CHOICES.length &&
+               current.every((v, i) => v === META_ACTIVITY_CHOICES[i]);
+  if (same) {
+    Logger.log('「活動類型」選項已是 v1.7 健保代碼版,跳過。');
+    return;
+  }
+
+  mc.setChoiceValues(META_ACTIVITY_CHOICES);
+  Logger.log('✓ 「活動類型」選項已更新:' + current.join(' / ') + ' → ' + META_ACTIVITY_CHOICES.join(' / '));
+  Logger.log('遷移完成。歷史回應資料不受影響(仍記舊選項字串,計算邏輯新舊都認得)。');
+  Logger.log('請開 Form 2 預覽確認三個選項:收案 (P7501) / 追蹤 (P7502) / 年度評估 (P7503)。');
 }
 
 
